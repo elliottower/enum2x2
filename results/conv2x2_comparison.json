@@ -1,0 +1,36 @@
+{
+  "sample_sizes": [
+    2000,
+    9170,
+    20306
+  ],
+  "decimals_printed": 2,
+  "seed": 20260904,
+  "tables": 1200,
+  "point_reconstruction": {
+    "tool": "metafor::conv.2x2",
+    "input_statistic": "phi",
+    "reconstructed": 1199,
+    "unavailable": 1,
+    "exact": 262,
+    "exact_fraction": 0.21833333333333332,
+    "largest_cell_error": {
+      "median": 2.0,
+      "p90": 8.0,
+      "max": 20.0
+    },
+    "within_1_count": 0.4778982485404504,
+    "within_5_counts": 0.8081734778982486
+  },
+  "enumeration": {
+    "input_statistic": "unweighted Cohen kappa",
+    "contains_true_table": 1200,
+    "contains_fraction": 1.0,
+    "n11_range_width": {
+      "median": 11,
+      "p90": 32,
+      "max": 41
+    },
+    "uniquely_identified": 29
+  }
+}

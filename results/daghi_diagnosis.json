@@ -1,0 +1,114 @@
+{
+  "row": "daghi2026",
+  "registered_result": "infeasible; no integer table reproduces N, both published marginals, the published raw agreement and kappa together",
+  "post_hoc": true,
+  "reference_total_scan": {
+    "totals_tested": 369,
+    "totals_reproducing_all_three_printed_rows": [
+      160
+    ],
+    "reading": "Only one reference total carries the source's own printed statistics, so the direction of the diagnosis is forced by the figures rather than chosen. The mirrored reading, with the criterion as reference, is not among the survivors."
+  },
+  "combinations": [
+    {
+      "combination": "at least one criterion met",
+      "cells": {
+        "n11": 153,
+        "n10": 94,
+        "n01": 7,
+        "n00": 116
+      },
+      "counts_forced": {
+        "positives_matching_sensitivity": [
+          153
+        ],
+        "negatives_matching_specificity": [
+          116
+        ]
+      },
+      "reproduces": {
+        "agreement": {
+          "computed": 0.727027027027027,
+          "published": "73"
+        },
+        "kappa": {
+          "computed": 0.47770789657582113,
+          "published": "0.48"
+        }
+      },
+      "implied_criterion_prevalence": 0.6675675675675675,
+      "kappa_max": 0.5501048218029352,
+      "kappa_min": -0.722012578616352,
+      "kappa_over_kappa_max": 0.8683943089430892
+    },
+    {
+      "combination": "at least two criteria met",
+      "cells": {
+        "n11": 145,
+        "n10": 34,
+        "n01": 15,
+        "n00": 176
+      },
+      "counts_forced": {
+        "positives_matching_sensitivity": [
+          145
+        ],
+        "negatives_matching_specificity": [
+          176
+        ]
+      },
+      "reproduces": {
+        "agreement": {
+          "computed": 0.8675675675675676,
+          "published": "87"
+        },
+        "kappa": {
+          "computed": 0.733969185619956,
+          "published": "0.73"
+        }
+      },
+      "implied_criterion_prevalence": 0.4837837837837838,
+      "kappa_max": 0.8968451944240647,
+      "kappa_min": -0.8404988994864271,
+      "kappa_over_kappa_max": 0.8183900523560209
+    },
+    {
+      "combination": "all three criteria met",
+      "cells": {
+        "n11": 116,
+        "n10": 17,
+        "n01": 44,
+        "n00": 193
+      },
+      "counts_forced": {
+        "positives_matching_sensitivity": [
+          116
+        ],
+        "negatives_matching_specificity": [
+          193
+        ]
+      },
+      "reproduces": {
+        "agreement": {
+          "computed": 0.8351351351351352,
+          "published": "84"
+        },
+        "kappa": {
+          "computed": 0.6572513287775247,
+          "published": "0.66"
+        }
+      },
+      "implied_criterion_prevalence": 0.35945945945945945,
+      "kappa_max": 0.8482915717539863,
+      "kappa_min": -0.6463173880030373,
+      "kappa_over_kappa_max": 0.7747941281775869
+    }
+  ],
+  "conflict": {
+    "published_criterion_prevalence": "44.6",
+    "count_published": 165,
+    "count_implied_by_the_other_figures": 247,
+    "prevalence_implied": 0.6675675675675675,
+    "reading": "N, the clinician marginal, sensitivity, specificity, raw agreement and kappa are mutually consistent and determine one table. The criterion prevalence printed alongside them is not the marginal of that table. The agreement analysis itself is internally consistent; the discrepant figure is the reported criterion prevalence."
+  }
+}
