@@ -65,8 +65,12 @@ with that reason.
 
 Four statuses, and they are kept apart: `unique`, `set`, `infeasible` (the published
 figures admit no common table), `insufficient` (a required figure was never published).
-An impossible *call* — a marginal above N, a κ outside [-1, 1] — raises `InvalidInput`.
-An impossible *source* is reported, never raised.
+An impossible *call* — a marginal above N, a κ outside [-1, 1], two marginals given for
+one criterion — raises `InvalidInput`. An impossible *source* is reported, never raised.
+
+`recover_many` cannot raise, so it carries a fifth status, `impossible`, for a row whose
+figures could not describe any table. Counting those as `insufficient` would inflate how
+many sources under-reported.
 
 ```bash
 enum2x2 comparisons.csv       # a file of comparisons, one per row
@@ -74,7 +78,7 @@ make recover                  # the corpus in experiments/table_recovery/inputs.
 make diagnose                 # why one comparison admits no table at all
 make compare                  # against metafor::conv.2x2, under rounding
 make crosscheck               # our kappa against every R implementation installed
-make test                     # 57 tests
+make test                     # 64 tests
 ```
 
 ## Why rounding is the whole problem
@@ -154,6 +158,10 @@ error of up to 20 patients *is* the claim.
    arithmetic, sharing no code with the enumerator, over every table at N = 16, 20 and 24.
    Agreement between two implementations that share helpers proves only that the helpers are
    consistent.
+   Those sweeps run at small N, where the granularity of κ and of the marginals is coarser
+   than the interval arithmetic being checked, so the rounding boundaries are stated as
+   concrete cases instead: a κ of exactly 0.625 sitting on the endpoint of `"0.62"`, and a
+   marginal printed `"0.512"` at N = 240 whose only valid count is lost to truncation.
 4. **Against the established R implementations of κ itself.** The enumeration is only as
    good as the statistic it inverts, so `make crosscheck` computes κ for 600 integer tables
    with this module and with every R implementation present on the machine, and reports the

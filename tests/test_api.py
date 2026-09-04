@@ -13,8 +13,8 @@ import sys
 import pytest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
-from enum2x2 import (INFEASIBLE, INSUFFICIENT, SET, UNIQUE, Enum2x2Error,
-                     InvalidInput, Table, recover, recover_many)
+from enum2x2 import (IMPOSSIBLE, INFEASIBLE, INSUFFICIENT, SET, UNIQUE,
+                     Enum2x2Error, InvalidInput, Table, recover, recover_many)
 
 DELIRIUM = dict(n=768, n_a=158, n_b=466, kappa="0.29")
 
@@ -63,10 +63,17 @@ def test_a_missing_marginal_is_reported_not_raised():
     assert r.status == INSUFFICIENT and "n_b" in r.reason
 
 
-def test_giving_both_a_count_and_a_percentage_for_one_side_is_reported():
-    r = recover(768, n_a=158, p_a="20.6", n_b=466, kappa="0.29",
+def test_giving_both_a_count_and_a_percentage_for_one_side_is_refused():
+    # Two marginals for one criterion is a defect in the call, not a property of
+    # the source, so it raises rather than being reported as under-reporting.
+    with pytest.raises(InvalidInput, match="not both"):
+        recover(768, n_a=158, p_a="20.6", n_b=466, kappa="0.29",
                 marginals_as_percent=True)
-    assert r.status == INSUFFICIENT and "exactly one" in r.reason
+
+
+def test_a_printed_marginal_outside_the_unit_interval_is_refused():
+    with pytest.raises(InvalidInput, match=r"outside \[0, 1\]"):
+        recover(100, p_a="150", p_b="50", kappa="0.5", marginals_as_percent=True)
 
 
 def test_figures_that_admit_no_table_are_reported_with_the_figure_that_excludes():
@@ -142,8 +149,26 @@ def test_one_bad_row_does_not_stop_the_others():
     out = recover_many([DELIRIUM,
                         dict(n=100, n_a=101, n_b=50, kappa="0.5"),   # impossible
                         dict(n=7328, n_a=174, n_b=175, kappa="0.668")])
-    assert [r.status for r in out] == [UNIQUE, INSUFFICIENT, UNIQUE]
+    assert [r.status for r in out] == [UNIQUE, IMPOSSIBLE, UNIQUE]
     assert "outside" in out[1].reason
+
+
+def test_a_batch_survives_a_column_the_function_does_not_take():
+    # A spreadsheet of published comparisons carries a label column.
+    out = recover_many([dict(study="Meagher 2014", **DELIRIUM)])
+    assert out[0].status == UNIQUE
+
+
+def test_a_batch_survives_a_cell_that_is_not_a_number():
+    out = recover_many([DELIRIUM, dict(n=100, n_a=50, n_b=50, kappa="NA"), DELIRIUM])
+    assert [r.status for r in out] == [UNIQUE, INSUFFICIENT, UNIQUE]
+
+
+def test_an_impossible_figure_is_not_counted_as_an_under_reporting_source():
+    # Counting these as 'insufficient' would inflate how many sources under-reported.
+    out = recover_many([dict(n=370, n_a=500, n_b=160, kappa="0.48"),
+                        dict(n=768, n_a=158, kappa="0.29")])
+    assert [r.status for r in out] == [IMPOSSIBLE, INSUFFICIENT]
 
 
 def test_a_batch_returns_one_result_per_row_in_order():
@@ -156,7 +181,7 @@ def test_the_status_is_always_one_of_the_four():
                         dict(n=768, n_a=158, kappa="0.29"),
                         dict(n=768, n_a=158, n_b=466, kappa="0.95"),
                         dict(n=20306, n_a=866, n_b=1603, kappa="0.22")])
-    assert {r.status for r in out} <= {UNIQUE, SET, INFEASIBLE, INSUFFICIENT}
+    assert {r.status for r in out} <= {UNIQUE, SET, INFEASIBLE, INSUFFICIENT, IMPOSSIBLE}
 
 
 # ------------------------------------------------------------------- repr
@@ -169,3 +194,40 @@ def test_the_status_is_always_one_of_the_four():
 ])
 def test_the_repr_says_what_happened(call, expected):
     assert expected in repr(recover(**call))
+
+
+# --------------------------------------------------------- rounding boundaries
+#
+# The exhaustive sweeps run at N <= 24, where the granularity of kappa and of the
+# marginals is far coarser than the interval arithmetic being tested, so neither
+# of these is reachable there. Both are stated as concrete cases instead.
+
+def test_a_statistic_exactly_on_the_upper_endpoint_is_admitted():
+    # The table (2, 0, 2, 20) at N = 24 has kappa exactly 0.625, which a source
+    # prints as "0.62" under round-half-even and "0.63" under round-half-up. The
+    # interval is closed at both ends because the convention is not stated, so the
+    # table survives either printing. A strict inequality loses it under both.
+    from enum2x2 import kappa_from_cells, rounds_to
+    k = kappa_from_cells(2, 0, 2, 20)
+    assert k == 0.625
+    assert rounds_to(k, "0.62")
+    assert rounds_to(k, "0.63")
+    assert recover(24, n_a=2, n_b=4, kappa="0.62").table == Table(2, 0, 2, 20)
+    assert recover(24, n_a=2, n_b=4, kappa="0.63").table == Table(2, 0, 2, 20)
+
+
+def test_the_top_of_a_marginal_interval_is_not_truncated_away():
+    # counts_rounding_to derives its upper bound with int(), which truncates. At
+    # N = 240 a marginal printed "0.512" admits exactly one count, 123, and
+    # int(0.5125 * 240) is 122 -- so without the +1 the only valid count is lost
+    # and the row wrongly reports that no table exists.
+    from enum2x2._core import counts_rounding_to
+    assert counts_rounding_to("0.512", 240) == [123]
+    assert counts_rounding_to("0.14", 200) == [27, 28, 29]
+    assert 63 in counts_rounding_to("0.3", 180)
+
+
+def test_a_marginal_whose_top_count_would_be_truncated_still_recovers():
+    r = recover(240, p_a="0.512", n_b=100, kappa="0.18")
+    assert r.status in (UNIQUE, SET)
+    assert all(t.n11 + t.n10 == 123 for t in r)

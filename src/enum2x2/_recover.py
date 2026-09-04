@@ -2,13 +2,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import inspect
 from typing import Iterator, Sequence
 
 from ._core import (InvalidInput, UndefinedStatistic, counts_rounding_to,
                     expected_agreement, kappa_from_cells, kappa_max, kappa_min,
-                    rounds_to)
+                    rounding_interval, rounds_to)
 
 UNIQUE, SET, INFEASIBLE, INSUFFICIENT = "unique", "set", "infeasible", "insufficient"
+# A batch cannot raise, so an impossible figure needs a status of its own: counting it
+# as 'insufficient' would inflate the number of sources that under-reported.
+IMPOSSIBLE = "impossible"
 
 
 @dataclass(frozen=True)
@@ -114,9 +118,19 @@ from ._core import Enum2x2Error  # noqa: E402  (used by Recovery above)
 def _marginal_counts(n: int, count: int | None, printed: str | None,
                      as_percent: bool, side: str) -> list[int]:
     if count is not None:
+        if isinstance(count, bool) or not isinstance(count, int):
+            raise InvalidInput(f"n_{side} must be an integer count, got {count!r}")
         if not 0 <= count <= n:
             raise InvalidInput(f"n_{side} = {count} is outside [0, {n}]")
-        return [int(count)]
+        return [count]
+    lo, hi = rounding_interval(printed, as_percent)
+    if hi < 0 or lo > 1:
+        # No proportion rounds to this, so there is no marginal at all. That is a
+        # defect in the call, not a property of the source, and reporting it as an
+        # empty candidate set would attach a false reason to it.
+        raise InvalidInput(
+            f"p_{side} = {printed!r} is outside [0, 1] as a proportion"
+            + (" (given as a percentage)" if as_percent else ""))
     return counts_rounding_to(printed, n, as_percent)
 
 
@@ -149,12 +163,15 @@ def recover(n: int,
                 f"a float cannot distinguish '0.10' from '0.1'")
     if kappa is None:
         return Recovery(INSUFFICIENT, n=n, reason="kappa was not reported")
-    if (n_a is None) == (p_a is None):
-        return Recovery(INSUFFICIENT, n=n,
-                        reason="give exactly one of n_a or p_a for the first criterion")
-    if (n_b is None) == (p_b is None):
-        return Recovery(INSUFFICIENT, n=n,
-                        reason="give exactly one of n_b or p_b for the second criterion")
+    for side, count, printed in (("a", n_a, p_a), ("b", n_b, p_b)):
+        if count is not None and printed is not None:
+            raise InvalidInput(
+                f"give n_{side} or p_{side} for the {'first' if side == 'a' else 'second'} "
+                f"criterion, not both")
+        if count is None and printed is None:
+            return Recovery(INSUFFICIENT, n=n,
+                            reason=f"neither n_{side} nor p_{side} was reported for the "
+                                   f"{'first' if side == 'a' else 'second'} criterion")
     if not -1.0 <= float(kappa) <= 1.0:
         raise InvalidInput(f"kappa = {kappa} is outside [-1, 1]")
 
@@ -185,6 +202,11 @@ def recover(n: int,
     published = {k: v for k, v in
                  (("n_a", n_a), ("n_b", n_b), ("p_a", p_a), ("p_b", p_b),
                   ("kappa", kappa), ("agreement", agreement)) if v is not None}
+    # Without the flags an archived result cannot be replayed from what it records.
+    if p_a is not None or p_b is not None:
+        published["marginals_as_percent"] = marginals_as_percent
+    if agreement is not None:
+        published["agreement_as_percent"] = agreement_as_percent
 
     if survivors:
         return Recovery(UNIQUE if len(survivors) == 1 else SET,
@@ -207,7 +229,8 @@ def recover(n: int,
                 continue
     if spans:
         lo, hi = min(s[0] for s in spans), max(s[1] for s in spans)
-        if not lo - 5e-3 <= float(kappa) <= hi + 5e-3:
+        k_lo, k_hi = rounding_interval(kappa)
+        if k_hi < lo or k_lo > hi:
             return Recovery(INFEASIBLE, n=n, published=published,
                             reason=f"the published kappa lies outside [{lo:.3f}, {hi:.3f}], "
                                    f"the range these marginals permit")
@@ -221,10 +244,15 @@ def recover_many(rows: Sequence[dict]) -> list[Recovery]:
     One malformed row does not stop the rest: it comes back with status
     'insufficient' and the reason, so a caller can count what was skipped.
     """
+    accepted = set(inspect.signature(recover).parameters) - {"n"}
     out = []
     for row in rows:
+        extra = set(row) - accepted - {"n"}
         try:
-            out.append(recover(**row))
-        except Enum2x2Error as e:
-            out.append(Recovery(INSUFFICIENT, n=row.get("n"), reason=str(e)))
+            r = recover(**{k: v for k, v in row.items() if k not in extra})
+        except InvalidInput as e:
+            r = Recovery(IMPOSSIBLE, n=row.get("n"), reason=str(e))
+        except (Enum2x2Error, TypeError, ValueError, ArithmeticError) as e:
+            r = Recovery(INSUFFICIENT, n=row.get("n"), reason=str(e))
+        out.append(r)
     return out

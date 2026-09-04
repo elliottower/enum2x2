@@ -38,86 +38,26 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
-from decimal import Decimal
+import sys
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT / "src"))
 INPUTS = PROJECT_ROOT / "experiments" / "table_recovery" / "inputs.json"
 RESULTS = PROJECT_ROOT / "results" / "recovery.json"
 
 
-class RecoveryError(Exception):
-    """The declared inputs are malformed."""
+# The primitives live in the package. They are imported rather than repeated so
+# that the exhaustive tests below, which exercise this module, exercise the shipped
+# library too: two copies of the arithmetic means the tested one need not be the
+# one a user installs.
+from enum2x2 import (Enum2x2Error, InvalidInput, UndefinedStatistic,
+                     expected_agreement, kappa_from_cells, kappa_max, kappa_min,
+                     recover, rounding_interval, rounds_to)
+from enum2x2._core import counts_rounding_to as _counts_rounding_to
 
-
-def rounding_interval(printed: str, as_percent: bool = False) -> tuple[float, float]:
-    """The closed interval of exact values that round to a printed string.
-
-    `printed` is the literal text of the source, so "0.10" and "0.1" give
-    different intervals, which is the whole reason values are declared as strings.
-
-    The interval is closed at both ends deliberately. A value falling exactly on a
-    boundary rounds up under one convention and down under another, and published
-    sources do not state which they used. Admitting both ends can only widen the
-    candidate set, which understates what the source identifies; excluding one end
-    can drop the true table, which asserts a precision the source does not carry.
-    A binary table of 24 with cells 2, 0, 2, 20 has kappa exactly 0.625, printed
-    as either "0.62" or "0.63", and a half-open interval loses it.
-    """
-    d = Decimal(printed)
-    step = Decimal(1).scaleb(d.as_tuple().exponent)     # unit in the last place
-    lo, hi = d - step / 2, d + step / 2
-    if as_percent:
-        lo, hi = lo / 100, hi / 100
-    return float(lo), float(hi)
-
-
-def rounds_to(value: float, printed: str, as_percent: bool = False) -> bool:
-    lo, hi = rounding_interval(printed, as_percent)
-    return lo - 1e-12 <= value <= hi + 1e-12
-
-
-def expected_agreement(p_a: float, p_b: float) -> float:
-    return p_a * p_b + (1.0 - p_a) * (1.0 - p_b)
-
-
-def kappa_from_cells(n11: int, n10: int, n01: int, n00: int) -> float:
-    n = n11 + n10 + n01 + n00
-    if n <= 0:
-        raise RecoveryError("empty table")
-    p_o = (n11 + n00) / n
-    p_e = expected_agreement((n11 + n10) / n, (n11 + n01) / n)
-    if abs(1.0 - p_e) < 1e-12:
-        raise RecoveryError("expected agreement is 1; kappa undefined")
-    return (p_o - p_e) / (1.0 - p_e)
-
-
-def kappa_max(p_a: float, p_b: float) -> float:
-    """Largest kappa these marginals permit. Equivalently uses p_o_max = 1 - |p_A - p_B|."""
-    p_e = expected_agreement(p_a, p_b)
-    p_o_max = min(p_a, p_b) + min(1.0 - p_a, 1.0 - p_b)
-    if abs(1.0 - p_e) < 1e-12:
-        raise RecoveryError("expected agreement is 1; kappa_max undefined")
-    return (p_o_max - p_e) / (1.0 - p_e)
-
-
-def kappa_min(p_a: float, p_b: float) -> float:
-    """Smallest kappa these marginals permit.
-
-    Marginals bound kappa from below as well as above. A published kappa outside
-    [kappa_min, kappa_max] cannot have come from a table with these marginals, and
-    saying so is more informative than reporting that no table survived.
-    """
-    p_e = expected_agreement(p_a, p_b)
-    p_o_min = max(0.0, 1.0 - p_a - p_b) + max(0.0, p_a + p_b - 1.0)
-    if abs(1.0 - p_e) < 1e-12:
-        raise RecoveryError("expected agreement is 1; kappa_min undefined")
-    return (p_o_min - p_e) / (1.0 - p_e)
-
-
-def _counts_rounding_to(printed: str, n: int, as_percent: bool) -> list[int]:
-    lo, hi = rounding_interval(printed, as_percent)
-    first, last = max(0, int(lo * n)), min(n, int(hi * n) + 1)
-    return [c for c in range(first, last + 1) if lo - 1e-12 <= c / n <= hi + 1e-12]
+# Kept as the name this module has always raised. It is the base class, so it
+# still names both an impossible input and an undefined statistic.
+RecoveryError = Enum2x2Error
 
 
 def marginal_counts(row: dict, side: str, n: int) -> list[int]:
@@ -145,45 +85,37 @@ def marginal_matches(row: dict, side: str, count: int, n: int) -> bool:
 
 
 def enumerate_tables(row: dict) -> list[dict]:
-    """Every integer table consistent with every published figure."""
+    """Every integer table consistent with every published figure.
+
+    A thin adapter over `enum2x2.recover`, so this module and the shipped library
+    run one enumeration rather than two. The corpus schema uses `N`, `p_A`/`n_A`
+    and `p_o`; the library uses `n`, `p_a`/`n_a` and `agreement`.
+    """
     n = row["N"]
-    a_counts = marginal_counts(row, "A", n)
-    b_counts = marginal_counts(row, "B", n)
-    kappa_printed = row["kappa"]
-    p_o_printed = row.get("p_o")
-    p_o_pct = row.get("p_o_as_percent", False)
+    call = {"n": n, "kappa": row["kappa"],
+            "marginals_as_percent": row.get("marginals_as_percent", False)}
+    for lib, corpus in (("a", "A"), ("b", "B")):
+        if row.get(f"n_{corpus}") is not None:
+            call[f"n_{lib}"] = row[f"n_{corpus}"]
+        else:
+            call[f"p_{lib}"] = row[f"p_{corpus}"]
+    if row.get("p_o") is not None:
+        call["agreement"] = row["p_o"]
+        call["agreement_as_percent"] = row.get("p_o_as_percent", False)
 
     out = []
-    for n_a in a_counts:
-        for n_b in b_counts:
-            lo = max(0, n_a + n_b - n)
-            hi = min(n_a, n_b)
-            for n11 in range(lo, hi + 1):
-                n10, n01 = n_a - n11, n_b - n11
-                n00 = n - n11 - n10 - n01
-                if n00 < 0:
-                    continue
-                # A candidate pair can make expected agreement exactly 1, which
-                # leaves kappa undefined. That pair contributes no table; it is not
-                # a reason to abandon the row, so it is skipped rather than raised.
-                if n * n == n_a * n_b + (n - n_a) * (n - n_b):
-                    continue
-                k = kappa_from_cells(n11, n10, n01, n00)
-                if not rounds_to(k, kappa_printed):
-                    continue
-                p_o = (n11 + n00) / n
-                if p_o_printed is not None and not rounds_to(p_o, p_o_printed, p_o_pct):
-                    continue
-                out.append({
-                    "cells": {"n11": n11, "n10": n10, "n01": n01, "n00": n00},
-                    "kappa": k,
-                    "p_o": p_o,
-                    "discordance": 1.0 - p_o,
-                    "d_A_pos_B_neg": n10 / n,
-                    "d_A_neg_B_pos": n01 / n,
-                    "kappa_max": kappa_max(n_a / n, n_b / n),
-                    "kappa_min": kappa_min(n_a / n, n_b / n),
-                })
+    for t in recover(**call):
+        p_a, p_b = (t.n11 + t.n10) / n, (t.n11 + t.n01) / n
+        out.append({
+            "cells": t.as_dict(),
+            "kappa": t.kappa,
+            "p_o": t.agreement,
+            "discordance": 1.0 - t.agreement,
+            "d_A_pos_B_neg": t.n10 / n,
+            "d_A_neg_B_pos": t.n01 / n,
+            "kappa_max": kappa_max(p_a, p_b),
+            "kappa_min": kappa_min(p_a, p_b),
+        })
     return out
 
 
