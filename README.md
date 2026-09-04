@@ -1,6 +1,9 @@
-# criterion-table-recovery
+# enum2x2
 
-Recovering the joint classification table from a published agreement statistic.
+Every 2×2 table compatible with a published agreement statistic.
+
+`metafor::conv.2x2` **conv**erts a summary into one table. This **enum**erates every table
+the summary admits, which under rounding is usually more than one and occasionally none.
 
 A study comparing two diagnostic criteria on one population computes its statistics from a
 2×2 table and then, usually, publishes the statistics instead of the table. The quantity a
