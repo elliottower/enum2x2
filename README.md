@@ -2,8 +2,10 @@
 
 Every 2×2 table compatible with a published agreement statistic.
 
-`metafor::conv.2x2` **conv**erts a summary into one table. This **enum**erates every table
-the summary admits, which under rounding is usually more than one and occasionally none.
+`enum2x2` returns every 2×2 table a published summary admits — under rounding that is
+usually more than one, and occasionally none. The closest existing tool,
+`metafor::conv.2x2`, **conv**erts a summary into a single table; this one **enum**erates
+all of them, and the names are meant to sit next to each other.
 
 A study comparing two diagnostic criteria on one population computes its statistics from a
 2×2 table and then, usually, publishes the statistics instead of the table. The quantity a
