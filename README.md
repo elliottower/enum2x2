@@ -20,9 +20,9 @@ Here is the table underneath it:
 | **strict +** | 158 | 0 |
 | **strict −** | 308 | 302 |
 
-They never disagree about a patient. Every patient the strict reading calls delirious, the
-relaxed reading calls delirious too. One is simply three times wider: 308 people change
-status in one direction and **zero** change back. Observed agreement is the highest these
+They never cross-classify. No patient is strict-positive and relaxed-negative; the 308 they
+differ on all fall the same way, relaxed-positive and strict-negative. One reading is simply
+three times wider than the other. Observed agreement is the highest these
 two marginals permit — κ = 0.29 *is* the ceiling here, not a shortfall from it.
 
 None of that is in "κ = 0.29", and κ = 0.29 is all the paper printed.
@@ -91,8 +91,8 @@ observations,
 But nobody prints exact inputs. A marginal printed `4.26%` and a κ printed `0.22` are
 *intervals*, so the inputs identify a **set** of integer tables. This walks every
 non-negative integer table summing to N whose statistics round back to the printed strings,
-and reports the set. Where a source also prints raw agreement, a sensitivity, a specificity
-or the cells themselves, those enter as further constraints and narrow it.
+and reports the set. Where a source also prints its raw agreement, that enters as a further constraint and
+narrows the set.
 
 Four outcomes, deliberately kept apart:
 
@@ -147,8 +147,8 @@ error of up to 20 patients *is* the claim.
 ## Validation
 
 1. **Exhaustively, over the whole space.** The enumerator must agree, as a *set*, with a
-   brute-force sweep over every integer table at N = 18 and N = 22 — 1,258 and 2,212 tables.
-   Not a sample of them.
+   brute-force sweep over every non-degenerate integer table at N = 18 and N = 22 — 1,258
+   and 2,212 of them, being every table for which κ is defined. Not a sample.
 2. **Against a second implementation.** Written from the definitions in exact rational
    arithmetic, sharing no code with the enumerator, over every table at N = 16, 20 and 24.
    Agreement between two implementations that share helpers proves only that the helpers are

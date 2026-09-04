@@ -5,7 +5,11 @@ from dataclasses import dataclass, field
 import inspect
 from typing import Iterator, Sequence
 
+from decimal import Decimal, InvalidOperation as InvalidDecimal
+from fractions import Fraction
+
 from ._core import (InvalidInput, UndefinedStatistic, counts_rounding_to,
+                    exact_interval, exact_kappa, exactly_rounds_to,
                     expected_agreement, kappa_from_cells, kappa_max, kappa_min,
                     rounding_interval, rounds_to)
 
@@ -153,7 +157,7 @@ def recover(n: int,
     but jointly admit nothing — that is a property of the source, not a defect in
     the call, so it is reported rather than raised.
     """
-    if not isinstance(n, int) or n <= 0:
+    if isinstance(n, bool) or not isinstance(n, int) or n <= 0:
         raise InvalidInput(f"N must be a positive integer, got {n!r}")
     for name, v in (("p_a", p_a), ("p_b", p_b), ("kappa", kappa),
                     ("agreement", agreement)):
@@ -172,7 +176,17 @@ def recover(n: int,
             return Recovery(INSUFFICIENT, n=n,
                             reason=f"neither n_{side} nor p_{side} was reported for the "
                                    f"{'first' if side == 'a' else 'second'} criterion")
-    if not -1.0 <= float(kappa) <= 1.0:
+    for name, v in (("kappa", kappa), ("agreement", agreement),
+                    ("p_a", p_a), ("p_b", p_b)):
+        if v is None:
+            continue
+        try:
+            parsed = Decimal(v)
+        except InvalidDecimal as exc:
+            raise InvalidInput(f"{name} = {v!r} is not a decimal number") from exc
+        if not parsed.is_finite():
+            raise InvalidInput(f"{name} = {v!r} is not a finite number")
+    if not -1 <= Decimal(kappa) <= 1:
         raise InvalidInput(f"kappa = {kappa} is outside [-1, 1]")
 
     a_counts = _marginal_counts(n, n_a, p_a, marginals_as_percent, "a")
@@ -191,13 +205,15 @@ def recover(n: int,
                 n00 = n - n11 - n10 - n01
                 if n00 < 0:
                     continue
-                t = Table(n11, n10, n01, n00)
-                if not rounds_to(t.kappa, kappa):
+                # Membership is decided in exact rationals. Both sides are
+                # rational -- a decimal string and a ratio of integers -- so the
+                # comparison is exact and no tolerance is chosen.
+                if not exactly_rounds_to(exact_kappa(n11, n10, n01, n00), kappa):
                     continue
-                if agreement is not None and not rounds_to(
-                        t.agreement, agreement, agreement_as_percent):
+                if agreement is not None and not exactly_rounds_to(
+                        Fraction(n11 + n00, n), agreement, agreement_as_percent):
                     continue
-                survivors.append(t)
+                survivors.append(Table(n11, n10, n01, n00))
 
     published = {k: v for k, v in
                  (("n_a", n_a), ("n_b", n_b), ("p_a", p_a), ("p_b", p_b),
@@ -229,7 +245,7 @@ def recover(n: int,
                 continue
     if spans:
         lo, hi = min(s[0] for s in spans), max(s[1] for s in spans)
-        k_lo, k_hi = rounding_interval(kappa)
+        k_lo, k_hi = (float(x) for x in exact_interval(kappa))
         if k_hi < lo or k_lo > hi:
             return Recovery(INFEASIBLE, n=n, published=published,
                             reason=f"the published kappa lies outside [{lo:.3f}, {hi:.3f}], "

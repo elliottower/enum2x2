@@ -160,8 +160,13 @@ def test_a_batch_survives_a_column_the_function_does_not_take():
 
 
 def test_a_batch_survives_a_cell_that_is_not_a_number():
+    # A cell that cannot be read is not the same as one the source left empty:
+    # the first is a figure this code cannot use, the second is a figure the
+    # source never published, and counting them together would misreport how much
+    # of the literature under-reports.
     out = recover_many([DELIRIUM, dict(n=100, n_a=50, n_b=50, kappa="NA"), DELIRIUM])
-    assert [r.status for r in out] == [UNIQUE, INSUFFICIENT, UNIQUE]
+    assert [r.status for r in out] == [UNIQUE, IMPOSSIBLE, UNIQUE]
+    assert "not a decimal number" in out[1].reason
 
 
 def test_an_impossible_figure_is_not_counted_as_an_under_reporting_source():
@@ -231,3 +236,51 @@ def test_a_marginal_whose_top_count_would_be_truncated_still_recovers():
     r = recover(240, p_a="0.512", n_b=100, kappa="0.18")
     assert r.status in (UNIQUE, SET)
     assert all(t.n11 + t.n10 == 123 for t in r)
+
+
+# ------------------------------------------------------------- exact filtering
+#
+# Membership is decided on rationals. Both sides are exact -- a decimal string and
+# a ratio of integers -- so there is no tolerance to choose, and a value outside
+# the interval is outside it however small the margin.
+
+def test_membership_admits_nothing_outside_the_declared_interval():
+    from fractions import Fraction
+    from enum2x2 import exact_interval, exactly_rounds_to
+    lo, hi = exact_interval("0.000000000000")
+    assert (lo, hi) == (Fraction(-5, 10**13), Fraction(5, 10**13))
+    assert exactly_rounds_to(hi, "0.000000000000")           # closed at the end
+    assert not exactly_rounds_to(hi + Fraction(1, 10**20), "0.000000000000")
+    assert not exactly_rounds_to(Fraction(1, 10**12), "0.000000000000")
+
+
+def test_the_exact_kappa_is_the_float_kappa_to_within_representation():
+    from enum2x2 import exact_kappa, kappa_from_cells
+    for cells in ((155, 355, 3, 255), (158, 0, 308, 302), (326, 540, 1277, 18163)):
+        assert abs(float(exact_kappa(*cells)) - kappa_from_cells(*cells)) < 1e-12
+
+
+def test_a_kappa_undefined_for_the_table_is_named_as_such():
+    from enum2x2 import UndefinedStatistic, exact_kappa
+    with pytest.raises(UndefinedStatistic):
+        exact_kappa(100, 0, 0, 0)
+
+
+def test_a_boolean_is_not_accepted_where_an_integer_is_required():
+    with pytest.raises(InvalidInput, match="positive integer"):
+        recover(True, n_a=1, n_b=1, kappa="0.5")
+    with pytest.raises(InvalidInput, match="integer count"):
+        recover(100, n_a=True, n_b=50, kappa="0.5")
+
+
+@pytest.mark.parametrize("bad", ["abc", "", "1e400"])
+def test_a_figure_that_is_not_a_decimal_number_is_refused(bad):
+    with pytest.raises(InvalidInput, match="not a decimal number|outside"):
+        recover(100, n_a=50, n_b=50, kappa=bad)
+
+
+@pytest.mark.parametrize("bad", ["nan", "inf", "-inf", "Infinity"])
+def test_a_figure_that_is_not_finite_is_refused(bad):
+    # Decimal accepts these, so the decimal parse alone does not catch them.
+    with pytest.raises(InvalidInput, match="not a finite number"):
+        recover(100, n_a=50, n_b=50, kappa=bad)

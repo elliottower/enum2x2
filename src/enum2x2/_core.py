@@ -9,6 +9,7 @@ within 6e-15. Nothing here is rewritten without re-earning that.
 from __future__ import annotations
 
 from decimal import Decimal
+from fractions import Fraction
 
 
 class Enum2x2Error(Exception):
@@ -24,6 +25,39 @@ class InvalidInput(Enum2x2Error):
 class UndefinedStatistic(Enum2x2Error):
     """A quantity is undefined for the table given, such as kappa where expected
     agreement is exactly one."""
+
+
+def exact_interval(printed: str, as_percent: bool = False) -> tuple[Fraction, Fraction]:
+    """The interval of `rounding_interval`, in exact rationals.
+
+    Membership is decided on these, not on their float images. A printed figure is
+    a decimal string and a table's statistic is a ratio of integers, so both are
+    rational and the comparison is exact; a tolerance would be admitting values the
+    source excludes.
+    """
+    d = Decimal(printed)
+    step = Decimal(1).scaleb(d.as_tuple().exponent)
+    lo, hi = Fraction(d - step / 2), Fraction(d + step / 2)
+    if as_percent:
+        lo, hi = lo / 100, hi / 100
+    return lo, hi
+
+
+def exact_kappa(n11: int, n10: int, n01: int, n00: int) -> Fraction:
+    """Cohen's kappa as a rational, for comparison against an exact interval."""
+    n = n11 + n10 + n01 + n00
+    if n <= 0:
+        raise InvalidInput("the table is empty")
+    p_o = Fraction(n11 + n00, n)
+    p_e = Fraction((n11 + n10) * (n11 + n01) + (n01 + n00) * (n10 + n00), n * n)
+    if p_e == 1:
+        raise UndefinedStatistic("expected agreement is 1, so kappa is undefined")
+    return (p_o - p_e) / (1 - p_e)
+
+
+def exactly_rounds_to(value: Fraction, printed: str, as_percent: bool = False) -> bool:
+    lo, hi = exact_interval(printed, as_percent)
+    return lo <= value <= hi
 
 
 def rounding_interval(printed: str, as_percent: bool = False) -> tuple[float, float]:
@@ -92,6 +126,13 @@ def kappa_min(p_a: float, p_b: float) -> float:
 
 
 def counts_rounding_to(printed: str, n: int, as_percent: bool = False) -> list[int]:
-    lo, hi = rounding_interval(printed, as_percent)
-    first, last = max(0, int(lo * n)), min(n, int(hi * n) + 1)
-    return [c for c in range(first, last + 1) if lo - 1e-12 <= c / n <= hi + 1e-12]
+    """Every integer count on n whose proportion rounds to the printed string.
+
+    Exact throughout: the bounds are rational, so the range is the ceiling of the
+    lower bound to the floor of the upper, with no truncation to guard against and
+    no tolerance to choose.
+    """
+    lo, hi = exact_interval(printed, as_percent)
+    first = max(0, -((-lo * n).__ceil__()) if False else (lo * n).__ceil__())
+    last = min(n, (hi * n).__floor__())
+    return list(range(first, last + 1)) if last >= first else []

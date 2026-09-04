@@ -18,12 +18,15 @@ from ._recover import INFEASIBLE, INSUFFICIENT, UNIQUE, recover_many
 
 INT_FIELDS = {"n", "n_a", "n_b"}
 BOOL_FIELDS = {"marginals_as_percent", "agreement_as_percent"}
+# What a spreadsheet puts in a cell it has no value for. These mean the source did
+# not report the figure, which is not the same as reporting something unreadable.
+MISSING = {"", "na", "n/a", "nan", "none", "null", "-", "--", "."}
 
 
 def _row(raw: dict) -> dict:
     out = {}
     for k, v in raw.items():
-        if v is None or v == "":
+        if v is None or str(v).strip().lower() in MISSING:
             continue
         k = k.strip()
         if k in INT_FIELDS:
