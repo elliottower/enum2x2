@@ -127,9 +127,12 @@ error of up to 20 patients *is* the claim.
 4. **Against the established R implementations of κ itself.** The enumeration is only as
    good as the statistic it inverts, so `make crosscheck` computes κ for 600 integer tables
    with this module and with every R implementation present on the machine, and reports the
-   largest disagreement. Against `irr::kappa2`, `psych::cohen.kappa` and `vcd::Kappa` the
-   worst disagreement is 6 × 10⁻¹⁵ — floating-point representation, not arithmetic. Packages
-   that are absent are named rather than silently skipped.
+   largest disagreement. Against `irr::kappa2`, `psych::cohen.kappa`, `vcd::Kappa` and
+   `DescTools::CohenKappa` the worst disagreement is 6 × 10⁻¹⁵ — floating-point
+   representation, not arithmetic. `epiR::epi.kappa` cannot be installed here (its
+   dependency chain wants GDAL) and is checked against its source instead, which is exact:
+   its `(pO.p - pE.p)/(1 - pE.p)` with `pE.p <- sum(r.totals * c.totals)/n^2` is the same
+   formula. Packages that are absent are named rather than silently skipped.
 
 ## Provenance
 

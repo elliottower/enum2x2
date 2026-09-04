@@ -3,21 +3,26 @@
   "tables": 600,
   "available": [
     "psych",
+    "DescTools",
     "vcd",
     "irr"
   ],
   "unavailable": [
-    "epiR",
-    "DescTools"
+    "epiR"
   ],
+  "verified_by_source_instead": {
+    "epiR": "kappa.p <- (pO.p - pE.p)/(1 - pE.p) with pE.p <- sum(r.totals * c.totals)/n^2; algebraically identical for a 2x2. Not run: its dependency chain requires GDAL."
+  },
   "largest_absolute_difference": {
     "irr": 6.089529921982084e-15,
     "psych": 3.0704605524789486e-15,
+    "DescTools": 1.1796119636642288e-15,
     "vcd": 1.1796119636642288e-15
   },
   "tables_compared": {
     "irr": 600,
     "psych": 600,
+    "DescTools": 600,
     "vcd": 600
   }
 }

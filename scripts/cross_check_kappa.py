@@ -10,6 +10,17 @@ every R implementation available on the machine, and reports the largest
 disagreement. Packages that are not installed are skipped and named, so the check
 is honest about how much corroboration it actually got.
 
+Where a package cannot be installed on this machine, its formula is checked by
+reading its source instead, which is exact rather than numerical. epiR is in that
+position: its dependency chain requires GDAL. Its kappa is
+
+    pE.p    <- sum(r.totals * c.totals) / n^2
+    kappa.p <- (pO.p - pE.p) / (1 - pE.p)
+
+and for a 2x2 the first line expands to p_a*p_b + (1-p_a)(1-p_b), which is
+expected_agreement here, while pO.p is sum(diag)/n. The formulas are the same, so a
+numerical comparison would add nothing to the algebra.
+
     irr::kappa2            from two columns of ratings
     psych::cohen.kappa     from a table
     epiR::epi.kappa        from a table
@@ -126,6 +137,11 @@ def main() -> int:
     report = {"seed": SEED, "tables": len(tables),
               "available": available,
               "unavailable": [p for p in packages if p not in available],
+              "verified_by_source_instead": {
+                  "epiR": "kappa.p <- (pO.p - pE.p)/(1 - pE.p) with "
+                          "pE.p <- sum(r.totals * c.totals)/n^2; algebraically "
+                          "identical for a 2x2. Not run: its dependency chain "
+                          "requires GDAL."},
               "largest_absolute_difference": {p: worst[p] for p in packages if compared[p]},
               "tables_compared": {p: compared[p] for p in packages if compared[p]}}
     out = PROJECT_ROOT / "results" / "cross_check_kappa.json"
