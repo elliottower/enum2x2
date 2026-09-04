@@ -1,0 +1,23 @@
+{
+  "seed": 20260904,
+  "tables": 600,
+  "available": [
+    "psych",
+    "vcd",
+    "irr"
+  ],
+  "unavailable": [
+    "epiR",
+    "DescTools"
+  ],
+  "largest_absolute_difference": {
+    "irr": 6.089529921982084e-15,
+    "psych": 3.0704605524789486e-15,
+    "vcd": 1.1796119636642288e-15
+  },
+  "tables_compared": {
+    "irr": 600,
+    "psych": 600,
+    "vcd": 600
+  }
+}

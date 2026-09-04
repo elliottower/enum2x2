@@ -1,4 +1,4 @@
-.PHONY: test recover diagnose compare all
+.PHONY: test recover diagnose compare crosscheck all
 
 test:
 	uv run --with pytest python -m pytest tests/ -q
@@ -12,4 +12,7 @@ diagnose:
 compare:          ## requires R with metafor; skips cleanly without it
 	python3 scripts/compare_conv2x2.py
 
-all: test recover diagnose compare
+crosscheck:       ## our kappa against every R implementation on this machine
+	python3 scripts/cross_check_kappa.py
+
+all: test recover diagnose compare crosscheck
