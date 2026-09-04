@@ -131,9 +131,12 @@ def main() -> int:
             "reading": "N, the clinician marginal, sensitivity, specificity, raw "
                        "agreement and kappa are mutually consistent and determine "
                        "one table. The criterion prevalence printed alongside them "
-                       "is not the marginal of that table. The agreement analysis "
-                       "itself is internally consistent; the discrepant figure is "
-                       "the reported criterion prevalence.",
+                       "is not the marginal of that table. Which of the six "
+                       "published figures is in error does not follow from the "
+                       "arithmetic: the summaries may rest on different "
+                       "denominators, on different versions of the classifying "
+                       "variable, or on separate analysis sets, and the report "
+                       "states none of these.",
         },
     }
     path = PROJECT_ROOT / "results" / "daghi_diagnosis.json"

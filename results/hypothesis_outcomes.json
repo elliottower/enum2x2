@@ -1,0 +1,59 @@
+{
+  "plan": "experiments/table_recovery/PREREG.md",
+  "note": "H2 and H3 are void if H1 fails, per the plan.",
+  "H1": {
+    "hypothesis": "at least 8 of the eligible comparisons recover",
+    "threshold": 8,
+    "eligible": 9,
+    "recovered": 8,
+    "holds": true
+  },
+  "H2": {
+    "hypothesis": "directional asymmetry above one third in at least half",
+    "statistic": "D = |n10 - n01| / (n10 + n01), smallest value the candidate set admits",
+    "threshold": 4.0,
+    "of": 8,
+    "hits": 4,
+    "which": [
+      "guerra2026",
+      "meagher2014_permissive",
+      "meagher2014_reading",
+      "meagher2014_strict"
+    ],
+    "per_comparison": {
+      "guerra2026": 0.39967014843320503,
+      "westbury2023": 0.22274881516587677,
+      "meagher2014_strict": 0.9832402234636871,
+      "meagher2014_reading": 1.0,
+      "meagher2014_permissive": 0.6666666666666666,
+      "inoue2012_fpg": 0.2727272727272727,
+      "inoue2012_hba1c": 0.3142857142857143,
+      "inoue2012_ada": 0.008849557522123894
+    },
+    "holds": true
+  },
+  "H3": {
+    "hypothesis": "kappa_max below 0.9 in at least half",
+    "threshold": 4.0,
+    "of": 8,
+    "hits": 5,
+    "which": [
+      "guerra2026",
+      "meagher2014_permissive",
+      "meagher2014_reading",
+      "meagher2014_strict",
+      "westbury2023"
+    ],
+    "per_comparison": {
+      "guerra2026": 0.6839991403556119,
+      "westbury2023": 0.8146096172954712,
+      "meagher2014_strict": 0.23170315803833294,
+      "meagher2014_reading": 0.28746656384798897,
+      "meagher2014_permissive": 0.8767830576704297,
+      "inoue2012_fpg": 0.9343204388197757,
+      "inoue2012_hba1c": 0.9313984393417303,
+      "inoue2012_ada": 0.9970647752197827
+    },
+    "holds": true
+  }
+}
