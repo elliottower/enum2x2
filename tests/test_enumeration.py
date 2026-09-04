@@ -1,9 +1,13 @@
-"""Tests for the table recovery.
+"""The enumeration, checked over a finite state space rather than over samples.
 
-The exhaustive test is the one that matters: for every integer table up to a
-small N, print what a paper would print, enumerate from that alone, and require
-the original table to be among the survivors. It establishes correctness over a
-finite state space rather than over samples.
+The test that matters is exhaustive: for every integer table up to a small N,
+print what a paper would print, enumerate from that alone, and require the set
+returned to equal the set of tables compatible with those printed strings. Not
+"the true table survives" -- set equality, so over-inclusion is caught too.
+
+A second sweep repeats it against an implementation written from the definitions
+in exact rational arithmetic, importing nothing from the package. Two
+implementations that share helpers establish only that the helpers are consistent.
 """
 from __future__ import annotations
 
@@ -14,11 +18,42 @@ from fractions import Fraction
 
 import pytest
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "scripts"))
-from recover_tables import (RecoveryError, enumerate_tables, expected_agreement,
-                            analyse, ineligibility, kappa_min, marginal_counts,
-                            kappa_from_cells, kappa_max, rounding_interval,
-                            rounds_to)
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / "src"))
+from enum2x2 import (Enum2x2Error, InvalidInput, expected_agreement,
+                     kappa_from_cells, kappa_max, kappa_min, recover,
+                     rounding_interval, rounds_to)
+from enum2x2._core import counts_rounding_to as _counts_rounding_to
+
+RecoveryError = Enum2x2Error
+
+
+def enumerate_tables(row: dict) -> list[dict]:
+    """The corpus schema, adapted to the library call, so the sweeps below read
+    the way they did when this file tested the corpus script."""
+    n = row["N"]
+    call = {"n": n, "kappa": row["kappa"],
+            "marginals_as_percent": row.get("marginals_as_percent", False)}
+    for lib, corpus in (("a", "A"), ("b", "B")):
+        if row.get(f"n_{corpus}") is not None:
+            call[f"n_{lib}"] = row[f"n_{corpus}"]
+        else:
+            call[f"p_{lib}"] = row[f"p_{corpus}"]
+    if row.get("p_o") is not None:
+        call["agreement"] = row["p_o"]
+        call["agreement_as_percent"] = row.get("p_o_as_percent", False)
+    return [{"cells": t.as_dict(), "kappa": t.kappa, "p_o": t.agreement,
+             "d_A_pos_B_neg": t.n10 / n, "d_A_neg_B_pos": t.n01 / n}
+            for t in recover(**call)]
+
+
+def marginal_counts(row, side, n):
+    if row.get(f"n_{side}") is not None:
+        c = row[f"n_{side}"]
+        if not 0 <= c <= n:
+            raise InvalidInput(f"n_{side} = {c} is outside [0, {n}]")
+        return [c]
+    return _counts_rounding_to(row[f"p_{side}"], n,
+                               row.get("marginals_as_percent", False))
 
 
 def _printed(x: float, dp: int) -> str:
@@ -269,12 +304,6 @@ def test_exact_counts_and_percentages_agree_where_the_percentage_pins_one_count(
     assert [t["cells"] for t in by_cnt] == [t["cells"] for t in by_pct]
 
 
-def test_a_row_giving_neither_count_nor_percentage_is_ineligible():
-    row = {"N": 100, "kappa": "0.5", "kappa_variant": "unweighted Cohen",
-           "denominator_status": "explicit_same", "n_A": 40}
-    assert "n_B" in ineligibility(row)
-
-
 def test_a_marginal_interval_reaching_zero_returns_tables_rather_than_raising():
     # A printed marginal of "0.0" admits a candidate pair whose expected agreement
     # is exactly 1, leaving kappa undefined for that pair alone. The row still has
@@ -284,33 +313,6 @@ def test_a_marginal_interval_reaching_zero_returns_tables_rather_than_raising():
     assert {(t["cells"]["n11"], t["cells"]["n10"], t["cells"]["n01"], t["cells"]["n00"])
             for t in enumerate_tables(row)} == {(0, 0, 1, 23), (0, 1, 0, 23)}
 
-
-def test_an_infeasible_row_names_the_figure_that_excludes_rather_than_the_kappa():
-    # Marginals and kappa alone admit a table; adding the published raw agreement
-    # empties the set. The reported reason must not blame the kappa.
-    n11, n10, n01, n00 = 115, 50, 45, 160
-    n = n11 + n10 + n01 + n00
-    row = {"N": n, "n_A": n11 + n10, "n_B": n11 + n01,
-           "kappa": _printed(kappa_from_cells(n11, n10, n01, n00), 2),
-           "p_o": "73", "p_o_as_percent": True,
-           "kappa_variant": "unweighted Cohen", "denominator_status": "explicit_same",
-           "condition": "x", "criteria": "x", "crossing": "x",
-           "source_artifact": "x", "quote": "x"}
-    assert enumerate_tables(row) == []
-    assert enumerate_tables({k: v for k, v in row.items() if k != "p_o"})
-    result = analyse("row", row)
-    assert result["status"] == "infeasible"
-    assert "p_o" in result["binding_constraints"]
-    assert "no integer table attains it" not in result["reason"]
-
-
-# ------------------------------------------------- independent reimplementation
-#
-# The sweep above shares kappa_from_cells and rounds_to with the module it checks,
-# so it establishes internal consistency rather than correctness. What follows
-# reimplements both from the definitions, in exact rational arithmetic, importing
-# nothing from recover_tables. Agreement between the two is then evidence about
-# the method rather than about one shared helper.
 
 def _independent_interval(printed: str) -> tuple[Fraction, Fraction]:
     """Values that round to a decimal string, from its digits alone."""

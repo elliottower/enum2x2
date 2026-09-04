@@ -74,11 +74,9 @@ many sources under-reported.
 
 ```bash
 enum2x2 comparisons.csv       # a file of comparisons, one per row
-make recover                  # the corpus in experiments/table_recovery/inputs.json
-make diagnose                 # why one comparison admits no table at all
+make test                     # 62 tests
 make compare                  # against metafor::conv.2x2, under rounding
-make crosscheck               # our kappa against every R implementation installed
-make test                     # 64 tests
+make crosscheck               # this kappa against every R implementation installed
 ```
 
 ## Why rounding is the whole problem
@@ -148,13 +146,10 @@ error of up to 20 patients *is* the claim.
 
 ## Validation
 
-1. **Against sources that print their own cells.** Five of the nine comparisons come from
-   papers that published the table as well as the statistics. The reconstruction runs from
-   the statistics alone and must return those cells. All five do.
-2. **Exhaustively, over the whole space.** The enumerator must agree, as a *set*, with a
+1. **Exhaustively, over the whole space.** The enumerator must agree, as a *set*, with a
    brute-force sweep over every integer table at N = 18 and N = 22 — 1,258 and 2,212 tables.
    Not a sample of them.
-3. **Against a second implementation.** Written from the definitions in exact rational
+2. **Against a second implementation.** Written from the definitions in exact rational
    arithmetic, sharing no code with the enumerator, over every table at N = 16, 20 and 24.
    Agreement between two implementations that share helpers proves only that the helpers are
    consistent.
@@ -162,7 +157,7 @@ error of up to 20 patients *is* the claim.
    than the interval arithmetic being checked, so the rounding boundaries are stated as
    concrete cases instead: a κ of exactly 0.625 sitting on the endpoint of `"0.62"`, and a
    marginal printed `"0.512"` at N = 240 whose only valid count is lost to truncation.
-4. **Against the established R implementations of κ itself.** The enumeration is only as
+3. **Against the established R implementations of κ itself.** The enumeration is only as
    good as the statistic it inverts, so `make crosscheck` computes κ for 600 integer tables
    with this module and with every R implementation present on the machine, and reports the
    largest disagreement. Against `irr::kappa2`, `psych::cohen.kappa`, `vcd::Kappa` and
@@ -172,14 +167,13 @@ error of up to 20 patients *is* the claim.
    its `(pO.p - pE.p)/(1 - pE.p)` with `pE.p <- sum(r.totals * c.totals)/n^2` is the same
    formula. Packages that are absent are named rather than silently skipped.
 
-## Provenance
+## The study this was built for
 
-`experiments/table_recovery/PREREG.md` was frozen before the enumeration was ever run, and
-records what had already been read, which rows were expected to recover, and every later
-deviation. `experiments/table_recovery/inputs.json` carries, for every figure used, the
-sentence it was read from. `docs/SOURCES.md` identifies each source article by the sha256 of
-the text extraction its figures were read from; the articles themselves are not
-redistributed.
+The delirium table above, and eight other published comparisons, are analysed in a
+manuscript on what a published agreement statistic conceals. That work lives in its own
+repository, with the corpus, the preregistration frozen before the enumeration was run, the
+results, and the sentence each published figure was read from. This package carries only the
+method.
 
 ## Citation
 
