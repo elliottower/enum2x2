@@ -31,20 +31,50 @@ None of that is in "κ = 0.29", and κ = 0.29 is all the paper printed.
 
 ```bash
 pip install enum2x2          # not yet on PyPI; for now:
-git clone https://github.com/elliottower/enum2x2 && cd enum2x2
+git clone https://github.com/elliottower/enum2x2 && cd enum2x2 && pip install -e .
 ```
 
-Standard library only. Python 3.10+. `make test` needs `pytest`; `make compare` needs R with
-`metafor` and skips cleanly without it.
+Standard library only. Python 3.10+. `make compare` and `make crosscheck` need R and skip
+cleanly without it.
 
 ## Use
 
+```python
+import enum2x2
+
+r = enum2x2.recover(768, n_a=158, n_b=466, kappa="0.29")
+r                     # <Recovery unique on N=768: Table(158, 0, 308, 302)>
+r.status              # 'unique'
+r.table.discordant    # (0, 308)   -- 308 patients one way, none the other
+r.table.asymmetry     # 1.0
+
+r = enum2x2.recover(20306, n_a=866, n_b=1603, kappa="0.22")
+r                     # <Recovery 11 tables on N=20306: 320-330/536-546/...>
+r.cell_ranges["n10"]  # (536, 546)
+
+r = enum2x2.recover(370, n_a=165, n_b=160, kappa="0.48",
+                    agreement="73", agreement_as_percent=True)
+r.status              # 'infeasible'
+r.reason              # 'the marginals and kappa admit 1 table(s); adding the
+                      #  published agreement admits none'
+```
+
+**κ is passed as the string the source printed**, not as a float: `"0.10"` and `"0.1"`
+imply different intervals and a float cannot tell them apart. Passing a float is refused
+with that reason.
+
+Four statuses, and they are kept apart: `unique`, `set`, `infeasible` (the published
+figures admit no common table), `insufficient` (a required figure was never published).
+An impossible *call* — a marginal above N, a κ outside [-1, 1] — raises `InvalidInput`.
+An impossible *source* is reported, never raised.
+
 ```bash
-make recover      # enumerate every comparison in experiments/table_recovery/inputs.json
-make diagnose     # why one comparison admits no table at all
-make compare      # against metafor::conv.2x2, under rounding
-make crosscheck   # our kappa against every R implementation installed
-make test         # 32 tests
+enum2x2 comparisons.csv       # a file of comparisons, one per row
+make recover                  # the corpus in experiments/table_recovery/inputs.json
+make diagnose                 # why one comparison admits no table at all
+make compare                  # against metafor::conv.2x2, under rounding
+make crosscheck               # our kappa against every R implementation installed
+make test                     # 57 tests
 ```
 
 ## Why rounding is the whole problem
