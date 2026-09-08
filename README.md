@@ -2,6 +2,11 @@
 
 **Every 2×2 table a published summary statistic still allows.**
 
+[![PyPI](https://img.shields.io/pypi/v/enum2x2)](https://pypi.org/project/enum2x2/)
+[![Tests](https://github.com/elliottower/enum2x2/actions/workflows/test.yml/badge.svg)](https://github.com/elliottower/enum2x2/actions/workflows/test.yml)
+[![Python](https://img.shields.io/pypi/pyversions/enum2x2)](https://pypi.org/project/enum2x2/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A study comparing two diagnostic criteria on one population computes its numbers from a
 2×2 table, then publishes the numbers and not the table. The quantity a reader wants —
 how many patients the two criteria classify differently, and *in which direction* — is

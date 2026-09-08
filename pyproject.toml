@@ -20,6 +20,9 @@ classifiers = [
 ]
 dependencies = []
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/enum2x2"]
+
 [project.optional-dependencies]
 test = ["pytest"]
 
