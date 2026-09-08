@@ -31,6 +31,3 @@ enum2x2 = "enum2x2.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/elliottower/enum2x2"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/enum2x2"]
