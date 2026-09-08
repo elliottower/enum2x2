@@ -25,6 +25,7 @@ packages = ["src/enum2x2"]
 
 [project.optional-dependencies]
 test = ["pytest"]
+notebook = ["jupyter", "matplotlib"]
 
 [project.scripts]
 enum2x2 = "enum2x2.__main__:main"
