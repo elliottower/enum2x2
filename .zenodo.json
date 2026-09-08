@@ -1,0 +1,28 @@
+{
+  "title": "enum2x2: every 2x2 table compatible with a published agreement statistic",
+  "upload_type": "software",
+  "description": "A study comparing two diagnostic criteria on one population computes its numbers from a 2x2 table, then publishes the numbers and not the table. Given a sample size, both positive marginals and Cohen's kappa, this package enumerates every integer table whose statistics round back to the digits the source printed, treating rounding as a constraint rather than as noise. It reports whether the published figures identify one table, several, or none, in exact rational arithmetic with no tolerance parameter. Used to recover the joint classification of sixteen published comparisons of diagnostic criteria across eight conditions.",
+  "creators": [
+    {
+      "name": "Tower, Elliot",
+      "orcid": "0000-0001-7004-8884"
+    }
+  ],
+  "license": "MIT",
+  "keywords": [
+    "contingency table",
+    "Cohen's kappa",
+    "agreement",
+    "diagnostic criteria",
+    "meta-research",
+    "reporting",
+    "reproducibility"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/elliottower/enum2x2",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ]
+}
