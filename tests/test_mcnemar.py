@@ -208,3 +208,37 @@ def test_bias_index_is_fixed_by_the_marginals_so_closes_nothing():
 def test_an_unknown_statistic_name_is_refused_and_lists_the_known_ones():
     with pytest.raises(InvalidInput, match="unknown statistic"):
         recover(100, n_a=50, n_b=50, banana="0.5")
+
+
+# --------------------------------------------------------------- mid-p variant
+
+from enum2x2._core import mcnemar_midp
+
+
+def test_midp_is_never_larger_than_the_exact_p():
+    for _, n10, n01, _ in tables(300, n_max=150):
+        assert mcnemar_midp(n10, n01) <= mcnemar_exact_p(n10, n01)
+
+
+def test_midp_subtracts_the_point_probability():
+    from math import comb
+    for _, n10, n01, _ in tables(200, n_max=120):
+        m = n10 + n01
+        if m == 0 or n10 == n01:
+            continue
+        point = Fraction(comb(m, min(n10, n01)), 2 ** m)
+        assert mcnemar_midp(n10, n01) == mcnemar_exact_p(n10, n01) - point
+
+
+def test_midp_uses_its_own_form_when_the_discordant_cells_are_equal():
+    from math import comb
+    for k in (1, 3, 8, 20):
+        point = Fraction(comb(2 * k, k), 2 ** (2 * k))
+        assert mcnemar_midp(k, k) == 1 - point / 2
+
+
+def test_midp_is_accepted_as_a_variant_and_can_change_the_recovered_set():
+    r = recover(215, n_a=181, n_b=201, mcnemar="<0.0001", mcnemar_test="midp")
+    assert r.status in (UNIQUE, SET)
+    for t in r:
+        assert mcnemar_midp(t.n10, t.n01) < Fraction(1, 10000)

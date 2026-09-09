@@ -11,14 +11,14 @@ from fractions import Fraction
 from ._core import (InvalidInput, UndefinedStatistic, counts_rounding_to,
                     exact_interval, exact_kappa, exactly_rounds_to,
                     expected_agreement, kappa_from_cells, kappa_max, kappa_min,
-                    mcnemar_chisq, mcnemar_exact_p, mcnemar_p,
+                    mcnemar_chisq, mcnemar_exact_p, mcnemar_midp, mcnemar_p,
                     rounding_interval, rounds_to, satisfies_printed_p,
                     CLOSING_STATISTICS)
 
 # Any one of these, added to both marginals and N, closes the table. A 2x2 with N
 # fixed has three degrees of freedom and the marginals use two.
 CLOSING = ("kappa", "agreement", "mcnemar", "discordant") + tuple(CLOSING_STATISTICS)
-MCNEMAR_TESTS = ("exact", "chisq", "chisq_cc")
+MCNEMAR_TESTS = ("exact", "midp", "chisq", "chisq_cc")
 
 UNIQUE, SET, INFEASIBLE, INSUFFICIENT = "unique", "set", "infeasible", "insufficient"
 # A batch cannot raise, so an impossible figure needs a status of its own: counting it

@@ -165,6 +165,31 @@ def mcnemar_exact_p(n10: int, n01: int) -> Fraction:
     return min(Fraction(1), Fraction(2 * tail, 2 ** m))
 
 
+
+def mcnemar_midp(n10: int, n01: int) -> Fraction:
+    """Two-sided mid-p McNemar, exactly, as a Fraction.
+
+    Fagerland, Lydersen and Laake (2013) give it as the two-sided exact p less
+    the point probability of the observed discordant count, with a separate form
+    when the two discordant cells are equal:
+
+        mid-p = two-sided p - f(n12 | n)
+        mid-p = 1 - f(n12 | n) / 2                 when n12 == n21
+
+    where f is the binomial point probability at n = n12 + n21, p = 1/2. Mid-p
+    sits between the conservative exact test and the asymptotic one; a source
+    that used it and a reader who assumes the exact test will disagree, which is
+    why the variant has to be an input rather than a default.
+    """
+    m = n10 + n01
+    if m == 0:
+        return Fraction(1)
+    point = Fraction(comb(m, min(n10, n01)), 2 ** m)
+    if n10 == n01:
+        return 1 - point / 2
+    return mcnemar_exact_p(n10, n01) - point
+
+
 def mcnemar_chisq(n10: int, n01: int, continuity: bool = False) -> Fraction:
     """McNemar's chi-square statistic, exactly, with or without Yates's correction.
 
@@ -197,13 +222,15 @@ def mcnemar_p(n10: int, n01: int, test: str = "exact") -> Fraction | float:
     """
     if test == "exact":
         return mcnemar_exact_p(n10, n01)
+    if test == "midp":
+        return mcnemar_midp(n10, n01)
     if test in ("chisq", "chisq_cc"):
         try:
             return chisq1_sf(float(mcnemar_chisq(n10, n01, continuity=(test == "chisq_cc"))))
         except UndefinedStatistic:
             return 1.0
     raise InvalidInput(
-        f"test must be 'exact', 'chisq' or 'chisq_cc', got {test!r}")
+        f"test must be 'exact', 'midp', 'chisq' or 'chisq_cc', got {test!r}")
 
 
 def satisfies_printed_p(value, printed: str, test: str) -> bool:
