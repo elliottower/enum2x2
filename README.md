@@ -64,6 +64,40 @@ r.reason              # 'the marginals and kappa admit 1 table(s); adding the
                       #  published agreement admits none'
 ```
 
+### What can close the table
+
+A 2×2 with N fixed has three degrees of freedom and the two marginals use two, so
+**one** further quantity closes it. Any of these will do, and each is passed as the string
+the source printed:
+
+```python
+enum2x2.recover(113, n_a=39, n_b=83, kappa="0.32")        # agreement coefficient
+enum2x2.recover(113, n_a=39, n_b=83, agreement="0.61")    # raw observed agreement
+enum2x2.recover(113, n_a=39, n_b=83, mcnemar="<0.001")    # a printed McNemar result
+enum2x2.recover(113, n_a=39, n_b=83, discordant=44)       # the discordant total itself
+enum2x2.recover(113, n_a=39, n_b=83, ppa="0.64")          # positive agreement
+```
+
+| input | what it is | notes |
+|---|---|---|
+| `kappa` | Cohen's κ | |
+| `agreement` | observed agreement, (n11+n00)/N | `agreement_as_percent` for "61" |
+| `mcnemar` | a printed p, point (`"0.0002"`) or bound (`"<0.001"`) | `mcnemar_test`: `exact` (default), `chisq`, `chisq_cc` |
+| `discordant` | n10 + n01, the count classified differently | an integer, not a string |
+| `ppa` / `npa` | positive / negative agreement | the FDA's concordance measures |
+| `jaccard` | overlap among cases either criterion identifies | ignores n00 |
+| `pabak` | prevalence-adjusted bias-adjusted κ | |
+| `scott_pi` / `gwet_ac1` | Scott's π, Gwet's AC1 | proposed where κ's prevalence dependence bites |
+| `prevalence_index` / `bias_index` | Byrt's indices | `bias_index` is fixed by the marginals, so it closes nothing alone |
+| `odds_ratio` / `mcnemar_odds_ratio` | cross-product, and the paired n10/n01 | |
+| `phi_squared` | φ², squared because φ is generally irrational | |
+
+**McNemar is the one worth spelling out.** It looks only at the two discordant cells, and
+the marginals already fix their *difference*, so the statistic fixes their *sum* and the
+table follows. A paper printing a McNemar result printed the table without saying so. The
+exact (binomial) variant is a ratio of integers and is decided exactly; the chi-square
+variants compute a tail probability that is not rational, and say so.
+
 **κ is passed as the string the source printed**, not as a float: `"0.10"` and `"0.1"`
 imply different intervals and a float cannot tell them apart. Passing a float is refused
 with that reason.
@@ -137,6 +171,20 @@ agreement studies report — and on rounding its documentation is candid:
 `conv.2x2` is not broken; it does what it says. But it hands you one table and no indication
 of how far off it is. When the claim is "540 patients were reclassified one way," an unstated
 error of up to 20 patients *is* the claim.
+
+## Where this sits among neighbouring packages
+
+| package | direction | framing | takes | returns |
+|---|---|---|---|---|
+| `metafor::conv.2x2` | reverse | unpaired, group × outcome | OR, φ, χ², sens/spec/PPV/NPV | one table, by optimization |
+| `irr`, `psych` | forward | paired agreement | raw ratings | κ, π, AC1, Bhapkar, Stuart–Maxwell |
+| `exact2x2`, `DTComPair` | forward | paired | raw counts | tests and intervals |
+| `scrutiny` (GRIM, GRIMMER, DEBIT) | reverse | means, SDs, binary means | reported summaries | whether the summary is attainable |
+| **`enum2x2`** | **reverse** | **paired agreement** | **κ, agreement, McNemar, and the rest above** | **every table the figures admit** |
+
+Nothing else runs the paired-agreement framing backwards, and nothing else reports a *set*.
+`scrutiny` is the closest in spirit — it asks what could have produced a printed number —
+but it asks it of means and standard deviations rather than of a table.
 
 ## What it will not do
 

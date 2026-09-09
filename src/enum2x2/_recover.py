@@ -11,7 +11,14 @@ from fractions import Fraction
 from ._core import (InvalidInput, UndefinedStatistic, counts_rounding_to,
                     exact_interval, exact_kappa, exactly_rounds_to,
                     expected_agreement, kappa_from_cells, kappa_max, kappa_min,
-                    rounding_interval, rounds_to)
+                    mcnemar_chisq, mcnemar_exact_p, mcnemar_p,
+                    rounding_interval, rounds_to, satisfies_printed_p,
+                    CLOSING_STATISTICS)
+
+# Any one of these, added to both marginals and N, closes the table. A 2x2 with N
+# fixed has three degrees of freedom and the marginals use two.
+CLOSING = ("kappa", "agreement", "mcnemar", "discordant") + tuple(CLOSING_STATISTICS)
+MCNEMAR_TESTS = ("exact", "chisq", "chisq_cc")
 
 UNIQUE, SET, INFEASIBLE, INSUFFICIENT = "unique", "set", "infeasible", "insufficient"
 # A batch cannot raise, so an impossible figure needs a status of its own: counting it
@@ -50,6 +57,19 @@ class Table:
         runs entirely one way. None when the two criteria never disagree."""
         d = self.n10 + self.n01
         return abs(self.n10 - self.n01) / d if d else None
+
+    @property
+    def n_discordant(self) -> int:
+        """The number of cases the two criteria classify differently."""
+        return self.n10 + self.n01
+
+    def mcnemar(self, test: str = "exact"):
+        """The p a McNemar variant reports for this table.
+
+        'exact' is a Fraction and decided exactly; the chi-square variants are
+        floats, because the statistic is rational and its tail is not.
+        """
+        return mcnemar_p(self.n10, self.n01, test)
 
     def as_dict(self) -> dict[str, int]:
         return {"n11": self.n11, "n10": self.n10, "n01": self.n01, "n00": self.n00}
@@ -144,8 +164,12 @@ def recover(n: int,
             p_a: str | None = None, p_b: str | None = None,
             kappa: str | None = None,
             agreement: str | None = None,
+            mcnemar: str | None = None,
+            mcnemar_test: str = "exact",
+            discordant: int | None = None,
             marginals_as_percent: bool = False,
-            agreement_as_percent: bool = False) -> Recovery:
+            agreement_as_percent: bool = False,
+            **statistics: str) -> Recovery:
     """Enumerate every integer table consistent with the figures as printed.
 
     Marginals are given either as exact counts (`n_a`, `n_b`) or as the strings a
@@ -160,13 +184,38 @@ def recover(n: int,
     if isinstance(n, bool) or not isinstance(n, int) or n <= 0:
         raise InvalidInput(f"N must be a positive integer, got {n!r}")
     for name, v in (("p_a", p_a), ("p_b", p_b), ("kappa", kappa),
-                    ("agreement", agreement)):
+                    ("agreement", agreement), ("mcnemar", mcnemar)):
         if v is not None and not isinstance(v, str):
             raise InvalidInput(
                 f"{name} must be the string the source printed, not {type(v).__name__}; "
                 f"a float cannot distinguish '0.10' from '0.1'")
-    if kappa is None:
-        return Recovery(INSUFFICIENT, n=n, reason="kappa was not reported")
+    if mcnemar_test not in MCNEMAR_TESTS:
+        raise InvalidInput(
+            f"mcnemar_test must be one of {MCNEMAR_TESTS}, got {mcnemar_test!r}")
+    if discordant is not None:
+        if isinstance(discordant, bool) or not isinstance(discordant, int):
+            raise InvalidInput(
+                f"discordant must be an integer count, got {discordant!r}")
+        if not 0 <= discordant <= n:
+            raise InvalidInput(f"discordant = {discordant} is outside [0, {n}]")
+    unknown = set(statistics) - set(CLOSING_STATISTICS)
+    if unknown:
+        raise InvalidInput(
+            f"unknown statistic(s) {sorted(unknown)}; accepted: "
+            + ", ".join(sorted(CLOSING_STATISTICS)))
+    for name, v in statistics.items():
+        if v is not None and not isinstance(v, str):
+            raise InvalidInput(
+                f"{name} must be the string the source printed, not "
+                f"{type(v).__name__}; a float cannot distinguish '0.10' from '0.1'")
+    extra = {k: v for k, v in statistics.items() if v is not None}
+    given = [name for name, v in (("kappa", kappa), ("agreement", agreement),
+                                  ("mcnemar", mcnemar), ("discordant", discordant))
+             if v is not None] + sorted(extra)
+    if not given:
+        return Recovery(INSUFFICIENT, n=n,
+                        reason="no closing statistic was reported; one of "
+                               + ", ".join(CLOSING) + " is needed alongside the marginals")
     for side, count, printed in (("a", n_a, p_a), ("b", n_b, p_b)):
         if count is not None and printed is not None:
             raise InvalidInput(
@@ -186,7 +235,7 @@ def recover(n: int,
             raise InvalidInput(f"{name} = {v!r} is not a decimal number") from exc
         if not parsed.is_finite():
             raise InvalidInput(f"{name} = {v!r} is not a finite number")
-    if not -1 <= Decimal(kappa) <= 1:
+    if kappa is not None and not -1 <= Decimal(kappa) <= 1:
         raise InvalidInput(f"kappa = {kappa} is outside [-1, 1]")
 
     a_counts = _marginal_counts(n, n_a, p_a, marginals_as_percent, "a")
@@ -198,7 +247,7 @@ def recover(n: int,
             # A candidate pair can make expected agreement exactly 1, leaving kappa
             # undefined for that pair alone. It contributes no table; it is not a
             # reason to abandon the row.
-            if n * n == na * nb + (n - na) * (n - nb):
+            if kappa is not None and n * n == na * nb + (n - na) * (n - nb):
                 continue
             for n11 in range(max(0, na + nb - n), min(na, nb) + 1):
                 n10, n01 = na - n11, nb - n11
@@ -208,16 +257,40 @@ def recover(n: int,
                 # Membership is decided in exact rationals. Both sides are
                 # rational -- a decimal string and a ratio of integers -- so the
                 # comparison is exact and no tolerance is chosen.
-                if not exactly_rounds_to(exact_kappa(n11, n10, n01, n00), kappa):
+                if kappa is not None and not exactly_rounds_to(
+                        exact_kappa(n11, n10, n01, n00), kappa):
                     continue
                 if agreement is not None and not exactly_rounds_to(
                         Fraction(n11 + n00, n), agreement, agreement_as_percent):
                     continue
+                if discordant is not None and n10 + n01 != discordant:
+                    continue
+                if mcnemar is not None and not satisfies_printed_p(
+                        mcnemar_p(n10, n01, mcnemar_test), mcnemar, mcnemar_test):
+                    continue
+                if extra:
+                    ok = True
+                    for name, printed in extra.items():
+                        fn = CLOSING_STATISTICS[name][0]
+                        try:
+                            value = fn(n11, n10, n01, n00)
+                        except UndefinedStatistic:
+                            ok = False   # undefined here, so this table cannot be the one
+                            break
+                        if not exactly_rounds_to(value, printed):
+                            ok = False
+                            break
+                    if not ok:
+                        continue
                 survivors.append(Table(n11, n10, n01, n00))
 
     published = {k: v for k, v in
                  (("n_a", n_a), ("n_b", n_b), ("p_a", p_a), ("p_b", p_b),
-                  ("kappa", kappa), ("agreement", agreement)) if v is not None}
+                  ("kappa", kappa), ("agreement", agreement),
+                  ("mcnemar", mcnemar), ("discordant", discordant)) if v is not None}
+    published.update(extra)
+    if mcnemar is not None:
+        published["mcnemar_test"] = mcnemar_test
     # Without the flags an archived result cannot be replayed from what it records.
     if p_a is not None or p_b is not None:
         published["marginals_as_percent"] = marginals_as_percent
