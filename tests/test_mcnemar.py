@@ -168,7 +168,7 @@ def test_the_published_record_carries_the_variant():
 from enum2x2._core import CLOSING_STATISTICS, UndefinedStatistic
 
 
-@pytest.mark.parametrize("name", sorted(CLOSING_STATISTICS))
+@pytest.mark.parametrize("name", sorted(set(CLOSING_STATISTICS) - {"prevalence_index", "bias_index"}))
 def test_each_statistic_recovers_the_table_that_produced_it(name):
     fn = CLOSING_STATISTICS[name][0]
     checked = 0
@@ -242,3 +242,22 @@ def test_midp_is_accepted_as_a_variant_and_can_change_the_recovered_set():
     assert r.status in (UNIQUE, SET)
     for t in r:
         assert mcnemar_midp(t.n10, t.n01) < Fraction(1, 10000)
+
+
+def test_neither_byrt_index_closes_the_table():
+    # Both reduce to functions of the marginals: (nA - nB)/N and (nA + nB - N)/N.
+    from enum2x2._core import prevalence_index, bias_index, MARGINAL_DETERMINED
+    from fractions import Fraction
+    assert MARGINAL_DETERMINED == {"prevalence_index", "bias_index"}
+    for cells in tables(300):
+        n11, n10, n01, n00 = cells
+        n, a, b = sum(cells), n11 + n10, n11 + n01
+        assert bias_index(*cells) == Fraction(a - b, n)
+        assert prevalence_index(*cells) == Fraction(a + b - n, n)
+
+
+@pytest.mark.parametrize("name", ["prevalence_index", "bias_index"])
+def test_a_marginal_determined_index_alone_is_insufficient(name):
+    r = recover(200, n_a=60, n_b=90, **{name: "0.10"})
+    assert r.status == INSUFFICIENT
+    assert "closing statistic" in r.reason

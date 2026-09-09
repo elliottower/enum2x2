@@ -13,11 +13,12 @@ from ._core import (InvalidInput, UndefinedStatistic, counts_rounding_to,
                     expected_agreement, kappa_from_cells, kappa_max, kappa_min,
                     mcnemar_chisq, mcnemar_exact_p, mcnemar_midp, mcnemar_p,
                     rounding_interval, rounds_to, satisfies_printed_p,
-                    CLOSING_STATISTICS)
+                    CLOSING_STATISTICS, MARGINAL_DETERMINED)
 
 # Any one of these, added to both marginals and N, closes the table. A 2x2 with N
 # fixed has three degrees of freedom and the marginals use two.
-CLOSING = ("kappa", "agreement", "mcnemar", "discordant") + tuple(CLOSING_STATISTICS)
+CLOSING = (("kappa", "agreement", "mcnemar", "discordant")
+           + tuple(k for k in CLOSING_STATISTICS if k not in MARGINAL_DETERMINED))
 MCNEMAR_TESTS = ("exact", "midp", "chisq", "chisq_cc")
 
 UNIQUE, SET, INFEASIBLE, INSUFFICIENT = "unique", "set", "infeasible", "insufficient"
@@ -211,7 +212,7 @@ def recover(n: int,
     extra = {k: v for k, v in statistics.items() if v is not None}
     given = [name for name, v in (("kappa", kappa), ("agreement", agreement),
                                   ("mcnemar", mcnemar), ("discordant", discordant))
-             if v is not None] + sorted(extra)
+             if v is not None] + sorted(k for k in extra if k not in MARGINAL_DETERMINED)
     if not given:
         return Recovery(INSUFFICIENT, n=n,
                         reason="no closing statistic was reported; one of "

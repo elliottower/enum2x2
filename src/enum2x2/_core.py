@@ -320,13 +320,21 @@ def gwet_ac1(n11: int, n10: int, n01: int, n00: int) -> Fraction:
 
 
 def prevalence_index(n11: int, n10: int, n01: int, n00: int) -> Fraction:
-    """Byrt's prevalence index: (n11 - n00) / N."""
+    """Byrt's prevalence index, (n11 - n00) / N.
+
+    Determined by the marginals: n00 = N - nA - nB + n11, so n11 - n00 reduces to
+    nA + nB - N and the index to (nA + nB - N)/N. Like the bias index it closes
+    nothing on its own, and is offered for checking a source against itself.
+    """
     return _f(n11 - n00, n11 + n10 + n01 + n00)
 
 
 def bias_index(n11: int, n10: int, n01: int, n00: int) -> Fraction:
-    """Byrt's bias index: (n10 - n01) / N. Fixed by the marginals, so it closes
-    nothing on its own; offered for checking a source against itself."""
+    """Byrt's bias index, (n10 - n01) / N.
+
+    Reduces to (nA - nB)/N, so like the prevalence index it is fixed by the
+    marginals and closes nothing on its own.
+    """
     return _f(n10 - n01, n11 + n10 + n01 + n00)
 
 
@@ -349,6 +357,11 @@ def phi(n11: int, n10: int, n01: int, n00: int) -> Fraction:
 
 
 # name -> (function, human description). Every one is exact.
+# Accepted as constraints, but functions of the marginals alone, so neither can
+# be the one further quantity that closes the table. Passing only one of these is
+# insufficient reporting, not a recovery.
+MARGINAL_DETERMINED = frozenset({"prevalence_index", "bias_index"})
+
 CLOSING_STATISTICS = {
     "ppa": (positive_agreement, "positive agreement, 2*n11/(2*n11+n10+n01)"),
     "npa": (negative_agreement, "negative agreement, 2*n00/(2*n00+n10+n01)"),
@@ -356,7 +369,7 @@ CLOSING_STATISTICS = {
     "pabak": (pabak, "prevalence-adjusted bias-adjusted kappa, 2*po-1"),
     "scott_pi": (scott_pi, "Scott's pi"),
     "gwet_ac1": (gwet_ac1, "Gwet's AC1"),
-    "prevalence_index": (prevalence_index, "Byrt's prevalence index"),
+    "prevalence_index": (prevalence_index, "Byrt's prevalence index; fixed by the marginals"),
     "bias_index": (bias_index, "Byrt's bias index; fixed by the marginals"),
     "odds_ratio": (odds_ratio, "cross-product odds ratio"),
     "mcnemar_odds_ratio": (mcnemar_odds_ratio, "paired odds ratio, n10/n01"),
