@@ -8,12 +8,13 @@ from typing import Iterator, Sequence
 from decimal import Decimal, InvalidOperation as InvalidDecimal
 from fractions import Fraction
 
-from ._core import (InvalidInput, UndefinedStatistic, counts_rounding_to,
-                    exact_interval, exact_kappa, exactly_rounds_to,
-                    expected_agreement, kappa_from_cells, kappa_max, kappa_min,
-                    mcnemar_chisq, mcnemar_exact_p, mcnemar_midp, mcnemar_p,
-                    rounding_interval, rounds_to, satisfies_printed_p,
-                    CLOSING_STATISTICS, MARGINAL_DETERMINED)
+from ._core import (CONVENTIONS, InvalidInput, UndefinedStatistic,
+                    counts_rounding_to, exact_interval, exact_kappa,
+                    exactly_rounds_to, expected_agreement, kappa_from_cells,
+                    kappa_max, kappa_min, mcnemar_chisq, mcnemar_exact_p,
+                    mcnemar_midp, mcnemar_p, rounding_interval, rounds_to,
+                    satisfies_printed_p, CLOSING_STATISTICS,
+                    MARGINAL_DETERMINED)
 
 # Any one of these, added to both marginals and N, closes the table. A 2x2 with N
 # fixed has three degrees of freedom and the marginals use two.
@@ -141,14 +142,14 @@ from ._core import Enum2x2Error  # noqa: E402  (used by Recovery above)
 
 
 def _marginal_counts(n: int, count: int | None, printed: str | None,
-                     as_percent: bool, side: str) -> list[int]:
+                     as_percent: bool, side: str, convention: str) -> list[int]:
     if count is not None:
         if isinstance(count, bool) or not isinstance(count, int):
             raise InvalidInput(f"n_{side} must be an integer count, got {count!r}")
         if not 0 <= count <= n:
             raise InvalidInput(f"n_{side} = {count} is outside [0, {n}]")
         return [count]
-    lo, hi = rounding_interval(printed, as_percent)
+    lo, hi = rounding_interval(printed, as_percent, convention)
     if hi < 0 or lo > 1:
         # No proportion rounds to this, so there is no marginal at all. That is a
         # defect in the call, not a property of the source, and reporting it as an
@@ -156,7 +157,7 @@ def _marginal_counts(n: int, count: int | None, printed: str | None,
         raise InvalidInput(
             f"p_{side} = {printed!r} is outside [0, 1] as a proportion"
             + (" (given as a percentage)" if as_percent else ""))
-    return counts_rounding_to(printed, n, as_percent)
+    return counts_rounding_to(printed, n, as_percent, convention)
 
 
 def recover(n: int,
@@ -170,12 +171,21 @@ def recover(n: int,
             discordant: int | None = None,
             marginals_as_percent: bool = False,
             agreement_as_percent: bool = False,
+            convention: str = "half_up",
             **statistics: str) -> Recovery:
     """Enumerate every integer table consistent with the figures as printed.
 
     Marginals are given either as exact counts (`n_a`, `n_b`) or as the strings a
     source printed (`p_a`, `p_b`); a printed string carries its own precision, so
     "0.10" and "0.1" are different inputs and must not be passed as floats.
+
+    `convention` says how the source produced its printed figures and applies to
+    every printed figure in the call: 'half_up' (the default) reads a figure as
+    plus or minus half a unit in its last place, 'truncate' reads it as the unit
+    running away from zero, and 'any' takes the union, which cannot drop a table
+    either convention admits. Sources truncate without saying so, and a figure
+    that could only have been truncated leaves an empty candidate set under the
+    default.
 
     Raises InvalidInput for a figure that cannot describe any table. Returns a
     Recovery with status 'infeasible' when the figures are individually possible
@@ -193,6 +203,11 @@ def recover(n: int,
     if mcnemar_test not in MCNEMAR_TESTS:
         raise InvalidInput(
             f"mcnemar_test must be one of {MCNEMAR_TESTS}, got {mcnemar_test!r}")
+    if convention not in CONVENTIONS:
+        # Checked here as well as in the interval arithmetic, which a call giving
+        # only exact counts never reaches.
+        raise InvalidInput(
+            f"convention must be one of {CONVENTIONS}, got {convention!r}")
     if discordant is not None:
         if isinstance(discordant, bool) or not isinstance(discordant, int):
             raise InvalidInput(
@@ -239,8 +254,8 @@ def recover(n: int,
     if kappa is not None and not -1 <= Decimal(kappa) <= 1:
         raise InvalidInput(f"kappa = {kappa} is outside [-1, 1]")
 
-    a_counts = _marginal_counts(n, n_a, p_a, marginals_as_percent, "a")
-    b_counts = _marginal_counts(n, n_b, p_b, marginals_as_percent, "b")
+    a_counts = _marginal_counts(n, n_a, p_a, marginals_as_percent, "a", convention)
+    b_counts = _marginal_counts(n, n_b, p_b, marginals_as_percent, "b", convention)
 
     survivors: list[Table] = []
     for na in a_counts:
@@ -259,15 +274,18 @@ def recover(n: int,
                 # rational -- a decimal string and a ratio of integers -- so the
                 # comparison is exact and no tolerance is chosen.
                 if kappa is not None and not exactly_rounds_to(
-                        exact_kappa(n11, n10, n01, n00), kappa):
+                        exact_kappa(n11, n10, n01, n00), kappa,
+                        convention=convention):
                     continue
                 if agreement is not None and not exactly_rounds_to(
-                        Fraction(n11 + n00, n), agreement, agreement_as_percent):
+                        Fraction(n11 + n00, n), agreement, agreement_as_percent,
+                        convention):
                     continue
                 if discordant is not None and n10 + n01 != discordant:
                     continue
                 if mcnemar is not None and not satisfies_printed_p(
-                        mcnemar_p(n10, n01, mcnemar_test), mcnemar, mcnemar_test):
+                        mcnemar_p(n10, n01, mcnemar_test), mcnemar, mcnemar_test,
+                        convention):
                     continue
                 if extra:
                     ok = True
@@ -278,7 +296,8 @@ def recover(n: int,
                         except UndefinedStatistic:
                             ok = False   # undefined here, so this table cannot be the one
                             break
-                        if not exactly_rounds_to(value, printed):
+                        if not exactly_rounds_to(value, printed,
+                                                 convention=convention):
                             ok = False
                             break
                     if not ok:
@@ -297,15 +316,28 @@ def recover(n: int,
         published["marginals_as_percent"] = marginals_as_percent
     if agreement is not None:
         published["agreement_as_percent"] = agreement_as_percent
+    # Recorded only where it is not the default, so a result archived before the
+    # parameter existed and one archived under the default read the same.
+    if convention != "half_up":
+        published["convention"] = convention
 
     if survivors:
         return Recovery(UNIQUE if len(survivors) == 1 else SET,
                         tuple(survivors), n=n, published=published)
 
     # Nothing survived. Say which figure excluded, rather than blaming the kappa.
+    # A printed marginal can be finer than 1/N -- routinely so where a source
+    # truncates -- and then no integer count matches it at all. The kappa is not
+    # what excluded, and saying it was would send a reader to the wrong figure.
+    for side, counts, printed in (("a", a_counts, p_a), ("b", b_counts, p_b)):
+        if not counts:
+            return Recovery(INFEASIBLE, n=n, published=published,
+                            reason=f"no integer count on {n} has a proportion "
+                                   f"matching p_{side} = {printed!r}")
     if agreement is not None:
         without = recover(n, n_a=n_a, n_b=n_b, p_a=p_a, p_b=p_b, kappa=kappa,
-                          marginals_as_percent=marginals_as_percent)
+                          marginals_as_percent=marginals_as_percent,
+                          convention=convention)
         if without:
             return Recovery(INFEASIBLE, n=n, published=published,
                             reason=f"the marginals and kappa admit {len(without)} "
@@ -319,7 +351,8 @@ def recover(n: int,
                 continue
     if spans:
         lo, hi = min(s[0] for s in spans), max(s[1] for s in spans)
-        k_lo, k_hi = (float(x) for x in exact_interval(kappa))
+        k_lo, k_hi = (float(x) for x in exact_interval(kappa,
+                                                       convention=convention))
         if k_hi < lo or k_lo > hi:
             return Recovery(INFEASIBLE, n=n, published=published,
                             reason=f"the published kappa lies outside [{lo:.3f}, {hi:.3f}], "

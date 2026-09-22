@@ -113,7 +113,7 @@ many sources under-reported.
 
 ```bash
 enum2x2 comparisons.csv       # a file of comparisons, one per row
-make test                     # 62 tests
+make test                     # 147 tests
 make compare                  # against metafor::conv.2x2, under rounding
 make crosscheck               # this kappa against every R implementation installed
 ```
@@ -132,6 +132,33 @@ But nobody prints exact inputs. A marginal printed `4.26%` and a κ printed `0.2
 non-negative integer table summing to N whose statistics round back to the printed strings,
 and reports the set. Where a source also prints its raw agreement, that enters as a further constraint and
 narrows the set.
+
+### Rounding conventions
+
+Which interval a printed figure stands for depends on how the source got from the exact
+value to the digits. The default reading is round-half-up, so `14.7` stands for
+[14.65, 14.75]. A source that truncates prints `14.7` for everything in [14.7, 14.8),
+which shares only its lower end with the first.
+
+| `convention` | a printed `p` means | |
+|---|---|---|
+| `half_up` | [p − u/2, p + u/2] | the default; closed at both ends, because the tie rule is not stated either |
+| `truncate` | [p, p + u) | the digits dropped and the sign kept |
+| `any` | the union of the two | cannot drop a table either convention admits |
+
+`u` is one unit in the last printed place, read off the literal string, so `"3.3"` and
+`"3.30"` differ here as they do everywhere else.
+
+```python
+enum2x2.recover(353, n_a=84, n_b=46, kappa="0.648", convention="any")
+```
+
+Goyal et al. (2025) print a kappa and a disagreement percentage for each of the 55
+pairwise comparisons of eleven gestational-diabetes criteria on 353 women. Held against
+the table its own kappa identifies, each printed disagreement is consistent with either
+convention (33 of them), with truncation alone (15), or with rounding alone (7). Read as
+rounded throughout, 15 of the 55 comparisons return no compatible table; under `any` all
+55 are uniquely identified.
 
 Four outcomes, deliberately kept apart:
 

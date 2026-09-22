@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
-from math import comb, erfc, sqrt
+from math import ceil, comb, erfc, floor, sqrt
 
 
 class Enum2x2Error(Exception):
@@ -28,19 +28,76 @@ class UndefinedStatistic(Enum2x2Error):
     agreement is exactly one."""
 
 
-def exact_interval(printed: str, as_percent: bool = False) -> tuple[Fraction, Fraction]:
+# How a source turned an exact value into the figure it printed. Sources round and
+# sources truncate, and a paper says which about as often as it says which tie rule
+# it used, so the convention is an input with a conservative union available.
+CONVENTIONS = ("half_up", "truncate", "any")
+
+
+def _interval_bounds(printed: str,
+                     convention: str) -> tuple[Decimal, Decimal, bool, bool]:
+    """What a printed figure stands for: (lo, hi, lo_closed, hi_closed).
+
+    One unit in the last printed place is the step, read off the literal text, so
+    "3.3" and "3.30" give different bounds.
+
+    'truncate' runs one step from the printed value away from zero -- [p, p+step)
+    for a positive figure, (p-step, p] for a negative one -- because a source that
+    truncates drops digits from the decimal representation and keeps the sign, and
+    -0.0537 printed that way gives "-0.05" rather than "-0.06". It is closed at
+    the printed value and open at the far end: a value a whole step away truncates
+    to the next figure, not to this one. A figure printed as zero is the exception,
+    since dropping the digits of -0.004 drops the sign with them.
+
+    'any' is the union of the two. Where the source does not say which it used,
+    the union is the only reading that cannot drop the true table.
+    """
+    d = Decimal(printed)
+    step = Decimal(1).scaleb(d.as_tuple().exponent)
+    if convention == "half_up":
+        return d - step / 2, d + step / 2, True, True
+    if convention == "truncate":
+        if d > 0:
+            return d, d + step, True, False
+        if d < 0:
+            return d - step, d, False, True
+        # A figure printed as zero has lost its sign: -0.004 and 0.004 are both
+        # "0.00" once the digits are dropped, so the interval runs either way.
+        return -step, step, False, False
+    if convention == "any":
+        if d > 0:
+            return d - step / 2, d + step, True, False
+        if d < 0:
+            return d - step, d + step / 2, False, True
+        return -step, step, False, False
+    raise InvalidInput(
+        f"convention must be one of {CONVENTIONS}, got {convention!r}")
+
+
+def _exact_bounds(printed: str, as_percent: bool,
+                  convention: str) -> tuple[Fraction, Fraction, bool, bool]:
+    """`_interval_bounds` as exact rationals, scaled where the figure is a percent."""
+    lo, hi, lo_closed, hi_closed = _interval_bounds(printed, convention)
+    lo, hi = Fraction(lo), Fraction(hi)
+    if as_percent:
+        lo, hi = lo / 100, hi / 100
+    return lo, hi, lo_closed, hi_closed
+
+
+def exact_interval(printed: str, as_percent: bool = False,
+                   convention: str = "half_up") -> tuple[Fraction, Fraction]:
     """The interval of `rounding_interval`, in exact rationals.
 
     Membership is decided on these, not on their float images. A printed figure is
     a decimal string and a table's statistic is a ratio of integers, so both are
     rational and the comparison is exact; a tolerance would be admitting values the
     source excludes.
+
+    The two bounds do not carry which ends belong to the interval: under
+    'truncate' and 'any' the far end is excluded. Decide membership with
+    `exactly_rounds_to`, which applies the comparison the convention calls for.
     """
-    d = Decimal(printed)
-    step = Decimal(1).scaleb(d.as_tuple().exponent)
-    lo, hi = Fraction(d - step / 2), Fraction(d + step / 2)
-    if as_percent:
-        lo, hi = lo / 100, hi / 100
+    lo, hi, _, _ = _exact_bounds(printed, as_percent, convention)
     return lo, hi
 
 
@@ -56,36 +113,55 @@ def exact_kappa(n11: int, n10: int, n01: int, n00: int) -> Fraction:
     return (p_o - p_e) / (1 - p_e)
 
 
-def exactly_rounds_to(value: Fraction, printed: str, as_percent: bool = False) -> bool:
-    lo, hi = exact_interval(printed, as_percent)
-    return lo <= value <= hi
+def exactly_rounds_to(value: Fraction, printed: str, as_percent: bool = False,
+                      convention: str = "half_up") -> bool:
+    lo, hi, lo_closed, hi_closed = _exact_bounds(printed, as_percent, convention)
+    return ((lo <= value if lo_closed else lo < value)
+            and (value <= hi if hi_closed else value < hi))
 
 
-def rounding_interval(printed: str, as_percent: bool = False) -> tuple[float, float]:
-    """The closed interval of exact values that round to a printed string.
+def rounding_interval(printed: str, as_percent: bool = False,
+                      convention: str = "half_up") -> tuple[float, float]:
+    """The interval of exact values a printed string stands for.
 
     `printed` is the literal text of the source, so "0.10" and "0.1" give
     different intervals, which is why values are declared as strings.
 
-    The interval is closed at both ends deliberately. A value falling exactly on a
-    boundary rounds up under one convention and down under another, and published
-    sources do not state which they used. Admitting both ends can only widen the
-    candidate set, which understates what the source identifies; excluding one end
-    can drop the true table, which asserts a precision the source does not carry.
-    A binary table of 24 with cells 2, 0, 2, 20 has kappa exactly 0.625, printed
-    as either "0.62" or "0.63", and a half-open interval loses it.
+    Under 'half_up', the default, the interval is closed at both ends
+    deliberately. A value falling exactly on a boundary rounds up under one
+    convention and down under another, and published sources do not state which
+    they used. Admitting both ends can only widen the candidate set, which
+    understates what the source identifies; excluding one end can drop the true
+    table, which asserts a precision the source does not carry. A binary table of
+    24 with cells 2, 0, 2, 20 has kappa exactly 0.625, printed as either "0.62" or
+    "0.63", and a half-open interval loses it.
+
+    The same argument runs across conventions. Sources truncate as well as round,
+    and a printed figure that could only have been truncated falls outside the
+    half-up interval, so assuming one convention drops tables the source admits.
+    'truncate' reads the figure as [p, p+step) and 'any' as the union of the two,
+    which is the reading to use where the source does not say. Under those two the
+    far end is excluded; `rounds_to` applies the comparison the convention calls
+    for, and the bounds alone do not carry it.
     """
-    d = Decimal(printed)
-    step = Decimal(1).scaleb(d.as_tuple().exponent)
-    lo, hi = d - step / 2, d + step / 2
+    lo, hi, _, _ = _interval_bounds(printed, convention)
     if as_percent:
         lo, hi = lo / 100, hi / 100
     return float(lo), float(hi)
 
 
-def rounds_to(value: float, printed: str, as_percent: bool = False) -> bool:
-    lo, hi = rounding_interval(printed, as_percent)
-    return lo - 1e-12 <= value <= hi + 1e-12
+def rounds_to(value: float, printed: str, as_percent: bool = False,
+              convention: str = "half_up") -> bool:
+    """The float image of `exactly_rounds_to`.
+
+    A tolerance absorbs representation error at a closed end. An open end takes
+    none: the excluded point is a single rational, and widening past it would
+    admit values the convention excludes for a reason that is not arithmetic.
+    """
+    lo, hi, lo_closed, hi_closed = _exact_bounds(printed, as_percent, convention)
+    lo, hi = float(lo), float(hi)
+    return ((lo - 1e-12 <= value if lo_closed else lo < value)
+            and (value <= hi + 1e-12 if hi_closed else value < hi))
 
 
 def expected_agreement(p_a: float, p_b: float) -> float:
@@ -126,16 +202,22 @@ def kappa_min(p_a: float, p_b: float) -> float:
     return (p_o_min - p_e) / (1.0 - p_e)
 
 
-def counts_rounding_to(printed: str, n: int, as_percent: bool = False) -> list[int]:
-    """Every integer count on n whose proportion rounds to the printed string.
+def counts_rounding_to(printed: str, n: int, as_percent: bool = False,
+                       convention: str = "half_up") -> list[int]:
+    """Every integer count on n whose proportion matches the printed string.
 
     Exact throughout: the bounds are rational, so the range is the ceiling of the
     lower bound to the floor of the upper, with no truncation to guard against and
-    no tolerance to choose.
+    no tolerance to choose. A count landing exactly on an open end is dropped,
+    which is where a truncating source parts from a rounding one.
     """
-    lo, hi = exact_interval(printed, as_percent)
-    first = max(0, -((-lo * n).__ceil__()) if False else (lo * n).__ceil__())
-    last = min(n, (hi * n).__floor__())
+    lo, hi, lo_closed, hi_closed = _exact_bounds(printed, as_percent, convention)
+    first, last = ceil(lo * n), floor(hi * n)
+    if not lo_closed and first == lo * n:
+        first += 1
+    if not hi_closed and last == hi * n:
+        last -= 1
+    first, last = max(0, first), min(n, last)
     return list(range(first, last + 1)) if last >= first else []
 
 # ------------------------------------------------------------------ McNemar
@@ -233,7 +315,8 @@ def mcnemar_p(n10: int, n01: int, test: str = "exact") -> Fraction | float:
         f"test must be 'exact', 'midp', 'chisq' or 'chisq_cc', got {test!r}")
 
 
-def satisfies_printed_p(value, printed: str, test: str) -> bool:
+def satisfies_printed_p(value, printed: str, test: str,
+                        convention: str = "half_up") -> bool:
     """Does a candidate table's p match what a source printed?
 
     A source prints either a bound ('<0.001') or a rounded point value
@@ -252,8 +335,8 @@ def satisfies_printed_p(value, printed: str, test: str) -> bool:
             return {"<": v < bound, "<=": v <= bound,
                     ">": v > bound, ">=": v >= bound}[op]
     if isinstance(value, Fraction):
-        return exactly_rounds_to(value, text)
-    return rounds_to(float(value), text)
+        return exactly_rounds_to(value, text, convention=convention)
+    return rounds_to(float(value), text, convention=convention)
 
 # ------------------------------------------------- other closing statistics
 #

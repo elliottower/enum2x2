@@ -12,12 +12,25 @@
   `scott_pi`, `gwet_ac1`, `prevalence_index`, `bias_index`, `odds_ratio`,
   `mcnemar_odds_ratio`, `phi_squared`.
 - `Table.n_discordant` and `Table.mcnemar(test=...)`.
+- `convention`, on `recover()` and on the interval functions, saying how the source
+  produced its printed digits: `half_up` (the default, unchanged), `truncate`, or
+  `any` for the union of the two. Sources truncate without saying so, and a figure
+  that could only have been truncated lies outside the half-up interval, so the
+  table that produced it is excluded and the comparison reports no compatible table
+  at all. Of the 55 pairwise comparisons in Goyal et al. 2025, 15 have disagreement
+  percentages a rounding source could not have printed; all 55 are recovered under
+  `any` against 40 under `half_up`.
+- `CONVENTIONS`, the three names.
 
 ### Changed
 - Any one closing statistic now suffices. Observed agreement alone determines the table
   and the package previously demanded kappa alongside it; that was a limitation, not a
   requirement of the arithmetic.
 - The `insufficient` reason names every accepted statistic rather than kappa alone.
+- An `infeasible` result whose printed marginal admits no integer count at all says
+  so, rather than reporting that the marginals permit the kappa but no table attains
+  it. A percentage finer than 1/N has no matching count, which is routine where a
+  source truncates.
 
 
 ## 0.1.0

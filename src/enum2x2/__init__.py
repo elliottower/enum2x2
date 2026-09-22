@@ -1,5 +1,5 @@
 """Every 2x2 table compatible with a published agreement statistic."""
-from ._core import (Enum2x2Error, InvalidInput, UndefinedStatistic,
+from ._core import (CONVENTIONS, Enum2x2Error, InvalidInput, UndefinedStatistic,
                     exact_interval, exact_kappa, exactly_rounds_to,
                     expected_agreement, kappa_from_cells, kappa_max, kappa_min,
                     rounding_interval, rounds_to)
@@ -11,5 +11,5 @@ __all__ = ["recover", "recover_many", "Recovery", "Table",
            "Enum2x2Error", "InvalidInput", "UndefinedStatistic",
            "kappa_from_cells", "kappa_max", "kappa_min",
            "expected_agreement", "rounding_interval", "rounds_to",
-           "exact_interval", "exact_kappa", "exactly_rounds_to"]
+           "exact_interval", "exact_kappa", "exactly_rounds_to", "CONVENTIONS"]
 __version__ = "0.1.0"
