@@ -10,8 +10,9 @@
 A study comparing two diagnostic criteria on one population computes its numbers from a
 2×2 table, then publishes the numbers and not the table. The quantity a reader wants —
 how many patients the two criteria classify differently, and *in which direction* — is
-gone. It is usually still recoverable, because the same reports print the sample size and
-both marginal totals, and those pin the table down.
+gone. It can often be recovered, because the same reports print the sample size, both
+marginal totals and a statistic such as κ, and together those leave a few integer tables,
+often just one.
 
 ## The problem, concretely
 
@@ -25,18 +26,23 @@ Here is the table underneath it:
 | **strict +** | 158 | 0 |
 | **strict −** | 308 | 302 |
 
-They never cross-classify. No patient is strict-positive and relaxed-negative; the 308 they
+The strict class is nested inside the relaxed one. No patient is strict-positive and relaxed-negative; the 308 they
 differ on all fall the same way, relaxed-positive and strict-negative. One reading is simply
 three times wider than the other. Observed agreement is the highest these
-two marginals permit — κ = 0.29 *is* the ceiling here, not a shortfall from it.
+two marginals permit: κ = 0.29 is the highest κ these marginals allow.
 
 None of that is in "κ = 0.29", and κ = 0.29 is all the paper printed.
 
 ## Install
 
 ```bash
-pip install enum2x2          # not yet on PyPI; for now:
-git clone https://github.com/elliottower/enum2x2 && cd enum2x2 && pip install -e .
+pip install enum2x2
+```
+
+For development:
+
+```bash
+git clone https://github.com/elliottower/enum2x2 && cd enum2x2 && pip install -e ".[test]"
 ```
 
 Standard library only. Python 3.10+. `make compare` and `make crosscheck` need R and skip
@@ -57,8 +63,8 @@ r = enum2x2.recover(20306, n_a=866, n_b=1603, kappa="0.22")
 r                     # <Recovery 11 tables on N=20306: 320-330/536-546/...>
 r.cell_ranges["n10"]  # (536, 546)
 
-r = enum2x2.recover(370, n_a=165, n_b=160, kappa="0.48",
-                    agreement="73", agreement_as_percent=True)
+r = enum2x2.recover(370, p_a="44.6", p_b="43.2", marginals_as_percent=True,
+                    kappa="0.48", agreement="73", agreement_as_percent=True)
 r.status              # 'infeasible'
 r.reason              # 'the marginals and kappa admit 1 table(s); adding the
                       #  published agreement admits none'
@@ -67,8 +73,8 @@ r.reason              # 'the marginals and kappa admit 1 table(s); adding the
 ### What can close the table
 
 A 2×2 with N fixed has three degrees of freedom and the two marginals use two, so
-**one** further quantity closes it. Any of these will do, and each is passed as the string
-the source printed:
+**one** further quantity closes it. Each of these does, passed as the string the source
+printed:
 
 ```python
 enum2x2.recover(113, n_a=39, n_b=83, kappa="0.32")        # agreement coefficient
@@ -77,6 +83,9 @@ enum2x2.recover(113, n_a=39, n_b=83, mcnemar="<0.001")    # a printed McNemar re
 enum2x2.recover(113, n_a=39, n_b=83, discordant=44)       # the discordant total itself
 enum2x2.recover(113, n_a=39, n_b=83, positive_agreement="0.64")   # specific agreement
 ```
+
+Everything accepted, including Byrt's two indices, which are taken as checks but close
+nothing on their own:
 
 | input | what it is | notes |
 |---|---|---|
@@ -110,13 +119,13 @@ figures admit no common table), `insufficient` (a required figure was never publ
 An impossible *call* — a marginal above N, a κ outside [-1, 1], two marginals given for
 one criterion — raises `InvalidInput`. An impossible *source* is reported, never raised.
 
-`recover_many` cannot raise, so it carries a fifth status, `impossible`, for a row whose
-figures could not describe any table. Counting those as `insufficient` would inflate how
-many sources under-reported.
+`recover_many` cannot raise, so a row that would have raised `InvalidInput` comes back with
+a fifth status, `impossible`, and its reason. Counting those as `insufficient` would inflate
+how many sources under-reported.
 
 ```bash
 enum2x2 comparisons.csv       # a file of comparisons, one per row
-make test                     # 147 tests
+make test                     # the test suite
 make compare                  # against metafor::conv.2x2, under rounding
 make crosscheck               # this kappa against every R implementation installed
 ```
@@ -147,7 +156,7 @@ which shares only its lower end with the first.
 |---|---|---|
 | `half_up` | [p − u/2, p + u/2] | the default; closed at both ends, because the tie rule is not stated either |
 | `truncate` | [p, p + u) | the digits dropped and the sign kept |
-| `any` | the union of the two | cannot drop a table either convention admits |
+| `any` | either reading, figure by figure | one source can round some figures and truncate others |
 
 `u` is one unit in the last printed place, read off the literal string, so `"3.3"` and
 `"3.30"` differ here as they do everywhere else.
@@ -188,8 +197,8 @@ agreement studies report — and on rounding its documentation is candid:
 > between the reported measures and the reconstructed ones are minimized. **This is not
 > guaranteed to reconstruct the actual table exactly**, but should usually yield a close match.
 
-`make compare` measures what "close" costs. On 1,200 known tables at N = 2,000, 9,170 and
-20,306 with one statistic printed to two decimals — the sizes real papers actually report at:
+`make compare` measures what "close" costs, on 1,200 known tables at N = 2,000, 9,170 and
+20,306 with one statistic printed to two decimals:
 
 | | `conv.2x2` point estimate | `enum2x2` |
 |---|---|---|
@@ -199,10 +208,10 @@ agreement studies report — and on rounding its documentation is candid:
 | uncertainty reported | none | the range itself |
 
 `conv.2x2` is not broken; it does what it says. But it hands you one table and no indication
-of how far off it is. When the claim is "540 patients were reclassified one way," an unstated
-error of up to 20 patients *is* the claim.
+of how far off it is. Where a finding rests on how many patients were reclassified in each
+direction, an unstated error of up to 20 patients can change it.
 
-## Where this sits among neighbouring packages
+## Where this sits among neighboring packages
 
 | package | direction | framing | takes | returns |
 |---|---|---|---|---|
@@ -210,11 +219,14 @@ error of up to 20 patients *is* the claim.
 | `irr`, `psych` | forward | paired agreement | raw ratings | κ, π, AC1, Bhapkar, Stuart–Maxwell |
 | `exact2x2`, `DTComPair` | forward | paired | raw counts | tests and intervals |
 | `scrutiny` (GRIM, GRIMMER, DEBIT) | reverse | means, SDs, binary means | reported summaries | whether the summary is attainable |
+| `mlscorecheck` | reverse | classifier evaluation | exact class counts on one side, rounded scores | whether any table fits |
 | **`enum2x2`** | **reverse** | **paired agreement** | **κ, agreement, McNemar, and the rest above** | **every table the figures admit** |
 
-Nothing else runs the paired-agreement framing backwards, and nothing else reports a *set*.
-`scrutiny` is the closest in spirit — it asks what could have produced a printed number —
-but it asks it of means and standard deviations rather than of a table.
+`mlscorecheck` is the closest. It reads printed scores as rounding intervals, as this
+package does, but takes the exact counts on one side and no second marginal, so where it
+runs it usually leaves many tables where both marginals leave one; on every table this
+package recovers, the two agree. We know of no other package that recovers a
+paired-agreement table from both marginals and reports every table the figures admit.
 
 ## What it will not do
 
@@ -252,7 +264,7 @@ but it asks it of means and standard deviations rather than of a table.
 
 ## The study this was built for
 
-The delirium table above, and eight other published comparisons, are analysed in a
+The delirium table above, and eight other published comparisons, are analyzed in a
 manuscript on what a published agreement statistic conceals. That work lives in its own
 repository, with the corpus, the preregistration frozen before the enumeration was run, the
 results, and the sentence each published figure was read from. This package carries only the
