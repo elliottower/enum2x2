@@ -1,4 +1,4 @@
-"""Export this package's behaviour as a fixture the R port is checked against.
+"""Export this package's behavior as a fixture the R port is checked against.
 
 The R implementation in ../enum2x2-r must reproduce this one exactly, so the
 Python package is used as the oracle: every case below is run through `recover`
