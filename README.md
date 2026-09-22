@@ -75,28 +75,31 @@ enum2x2.recover(113, n_a=39, n_b=83, kappa="0.32")        # agreement coefficien
 enum2x2.recover(113, n_a=39, n_b=83, agreement="0.61")    # raw observed agreement
 enum2x2.recover(113, n_a=39, n_b=83, mcnemar="<0.001")    # a printed McNemar result
 enum2x2.recover(113, n_a=39, n_b=83, discordant=44)       # the discordant total itself
-enum2x2.recover(113, n_a=39, n_b=83, ppa="0.64")          # positive agreement
+enum2x2.recover(113, n_a=39, n_b=83, positive_agreement="0.64")   # specific agreement
 ```
 
 | input | what it is | notes |
 |---|---|---|
 | `kappa` | Cohen's κ | |
+| `phi` | the φ coefficient as printed, sign included | decided exactly, through φ² with the sign kept |
 | `agreement` | observed agreement, (n11+n00)/N | `agreement_as_percent` for "61" |
-| `mcnemar` | a printed p, point (`"0.0002"`) or bound (`"<0.001"`) | `mcnemar_test`: `exact` (default), `chisq`, `chisq_cc` |
+| `mcnemar` | a printed p, point (`"0.0002"`) or bound (`"<0.001"`) | `mcnemar_test`: `exact` (default), `midp`, `chisq`, `chisq_cc`; `chisq_cc` follows R's `mcnemar.test` |
 | `discordant` | n10 + n01, the count classified differently | an integer, not a string |
-| `ppa` / `npa` | positive / negative agreement | the FDA's concordance measures |
+| `positive_agreement` / `negative_agreement` | positive / negative specific agreement (Cicchetti and Feinstein 1990) | symmetric in the two criteria; not the FDA's PPA and NPA, which take one criterion as the comparator |
 | `jaccard` | overlap among cases either criterion identifies | ignores n00 |
 | `pabak` | prevalence-adjusted bias-adjusted κ | |
 | `scott_pi` / `gwet_ac1` | Scott's π, Gwet's AC1 | proposed where κ's prevalence dependence bites |
-| `prevalence_index` / `bias_index` | Byrt's indices | `bias_index` is fixed by the marginals, so it closes nothing alone |
+| `prevalence_index` / `bias_index` | Byrt's indices | both are fixed by the marginals, so neither closes the table alone |
 | `odds_ratio` / `mcnemar_odds_ratio` | cross-product, and the paired n10/n01 | |
-| `phi_squared` | φ², squared because φ is generally irrational | |
+| `phi_squared` | φ², for a source that printed the square | a printed φ goes to `phi`: the square of φ's rounding interval is not the interval of a printed φ² |
 
 **McNemar is the one worth spelling out.** It looks only at the two discordant cells, and
 the marginals already fix their *difference*, so the statistic fixes their *sum* and the
 table follows. A paper printing a McNemar result printed the table without saying so. The
 exact (binomial) variant is a ratio of integers and is decided exactly; the chi-square
-variants compute a tail probability that is not rational, and say so.
+variants compute a tail probability that is not rational, and say so. The exact test
+recomputes its binomial tail for each candidate table, so with McNemar as the only
+closing figure it slows above a few thousand cases; alongside kappa it is fast.
 
 **κ is passed as the string the source printed**, not as a float: `"0.10"` and `"0.1"`
 imply different intervals and a float cannot tell them apart. Passing a float is refused

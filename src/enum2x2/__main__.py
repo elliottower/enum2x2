@@ -4,7 +4,8 @@
     enum2x2 comparisons.json --format json
 
 Each row gives one comparison. Columns: n, and then either n_a/n_b (exact counts)
-or p_a/p_b (the strings the source printed), plus kappa, and optionally agreement.
+or p_a/p_b (the strings the source printed), plus a closing statistic: kappa,
+phi, agreement, discordant, mcnemar, or any further statistic recover() accepts.
 Strings are read as printed, so a marginal of "2.10" keeps its precision.
 """
 from __future__ import annotations
@@ -16,7 +17,7 @@ import sys
 
 from ._recover import INFEASIBLE, INSUFFICIENT, UNIQUE, recover_many
 
-INT_FIELDS = {"n", "n_a", "n_b"}
+INT_FIELDS = {"n", "n_a", "n_b", "discordant"}
 BOOL_FIELDS = {"marginals_as_percent", "agreement_as_percent"}
 # What a spreadsheet puts in a cell it has no value for. These mean the source did
 # not report the figure, which is not the same as reporting something unreadable.
@@ -30,7 +31,16 @@ def _row(raw: dict) -> dict:
             continue
         k = k.strip()
         if k in INT_FIELDS:
-            out[k] = int(float(v))
+            # A count printed with a fractional part is not a count. It is passed on
+            # as text, so recover() rejects the row with a reason, rather than
+            # truncated here into a figure the source never printed.
+            text = str(v).strip()
+            try:
+                f = float(text)
+            except ValueError:
+                out[k] = text
+                continue
+            out[k] = int(f) if f.is_integer() else text
         elif k in BOOL_FIELDS:
             out[k] = str(v).strip().lower() in ("1", "true", "yes", "y")
         else:

@@ -12,13 +12,13 @@ from ._core import (CONVENTIONS, InvalidInput, UndefinedStatistic,
                     counts_rounding_to, exact_interval, exact_kappa,
                     exactly_rounds_to, expected_agreement, kappa_from_cells,
                     kappa_max, kappa_min, mcnemar_chisq, mcnemar_exact_p,
-                    mcnemar_midp, mcnemar_p, rounding_interval, rounds_to,
-                    satisfies_printed_p, CLOSING_STATISTICS,
-                    MARGINAL_DETERMINED)
+                    mcnemar_midp, mcnemar_p, normalize_printed_p, phi_rounds_to,
+                    rounding_interval, rounds_to, satisfies_printed_p,
+                    CLOSING_STATISTICS, MARGINAL_DETERMINED, RANGES)
 
 # Any one of these, added to both marginals and N, closes the table. A 2x2 with N
 # fixed has three degrees of freedom and the marginals use two.
-CLOSING = (("kappa", "agreement", "mcnemar", "discordant")
+CLOSING = (("kappa", "phi", "agreement", "mcnemar", "discordant")
            + tuple(k for k in CLOSING_STATISTICS if k not in MARGINAL_DETERMINED))
 MCNEMAR_TESTS = ("exact", "midp", "chisq", "chisq_cc")
 
@@ -128,6 +128,8 @@ class Recovery:
     def __repr__(self) -> str:
         if self.status == INSUFFICIENT:
             return f"<Recovery insufficient: {self.reason}>"
+        if self.status == IMPOSSIBLE:
+            return f"<Recovery impossible: {self.reason}>"
         if self.status == INFEASIBLE:
             return f"<Recovery infeasible on N={self.n}: {self.reason}>"
         if self.status == UNIQUE:
@@ -165,6 +167,7 @@ def recover(n: int,
             n_a: int | None = None, n_b: int | None = None,
             p_a: str | None = None, p_b: str | None = None,
             kappa: str | None = None,
+            phi: str | None = None,
             agreement: str | None = None,
             mcnemar: str | None = None,
             mcnemar_test: str = "exact",
@@ -175,6 +178,9 @@ def recover(n: int,
             **statistics: str) -> Recovery:
     """Enumerate every integer table consistent with the figures as printed.
 
+    `phi` is the phi coefficient as printed, sign included; `phi_squared`, among the
+    further statistics, is for a source that printed its square.
+
     Marginals are given either as exact counts (`n_a`, `n_b`) or as the strings a
     source printed (`p_a`, `p_b`); a printed string carries its own precision, so
     "0.10" and "0.1" are different inputs and must not be passed as floats.
@@ -183,7 +189,8 @@ def recover(n: int,
     every printed figure in the call: 'half_up' (the default) reads a figure as
     plus or minus half a unit in its last place, 'truncate' reads it as the unit
     running away from zero, and 'any' takes the union, which cannot drop a table
-    either convention admits. Sources truncate without saying so, and a figure
+    either convention admits. Under 'any' each figure is read either way on its
+    own, since one source can round some figures and truncate others. Sources truncate without saying so, and a figure
     that could only have been truncated leaves an empty candidate set under the
     default.
 
@@ -194,7 +201,7 @@ def recover(n: int,
     """
     if isinstance(n, bool) or not isinstance(n, int) or n <= 0:
         raise InvalidInput(f"N must be a positive integer, got {n!r}")
-    for name, v in (("p_a", p_a), ("p_b", p_b), ("kappa", kappa),
+    for name, v in (("p_a", p_a), ("p_b", p_b), ("kappa", kappa), ("phi", phi),
                     ("agreement", agreement), ("mcnemar", mcnemar)):
         if v is not None and not isinstance(v, str):
             raise InvalidInput(
@@ -225,7 +232,39 @@ def recover(n: int,
                 f"{name} must be the string the source printed, not "
                 f"{type(v).__name__}; a float cannot distinguish '0.10' from '0.1'")
     extra = {k: v for k, v in statistics.items() if v is not None}
-    given = [name for name, v in (("kappa", kappa), ("agreement", agreement),
+    # Every printed figure is read before anything else, so a malformed or impossible
+    # figure is reported as such whatever else the call does or does not contain.
+    for name, v in ((("kappa", kappa), ("phi", phi), ("agreement", agreement),
+                     ("p_a", p_a), ("p_b", p_b)) + tuple(extra.items())):
+        if v is None:
+            continue
+        try:
+            parsed = Decimal(v)
+        except InvalidDecimal as exc:
+            raise InvalidInput(f"{name} = {v!r} is not a decimal number") from exc
+        if not parsed.is_finite():
+            raise InvalidInput(f"{name} = {v!r} is not a finite number")
+        lo, hi = RANGES.get(name, (None, None))
+        if name == "agreement" and agreement_as_percent:
+            lo, hi = 0, 100
+        if (lo is not None and parsed < lo) or (hi is not None and parsed > hi):
+            span = f"[{lo}, {hi if hi is not None else 'infinity'}]"
+            raise InvalidInput(f"{name} = {v} is outside {span}, the values it can take")
+    if mcnemar is not None:
+        text = normalize_printed_p(mcnemar)
+        for op in ("<=", ">=", "<", ">"):
+            if text.startswith(op):
+                text = text[len(op):]
+                break
+        try:
+            value = Decimal(text)
+            ok = value.is_finite() and 0 <= value <= 1
+        except InvalidDecimal:
+            ok = False
+        if not ok:
+            raise InvalidInput(
+                f"mcnemar = {mcnemar!r} is not a p value as printed, such as '0.03' or '<0.001'")
+    given = [name for name, v in (("kappa", kappa), ("phi", phi), ("agreement", agreement),
                                   ("mcnemar", mcnemar), ("discordant", discordant))
              if v is not None] + sorted(k for k in extra if k not in MARGINAL_DETERMINED)
     if not given:
@@ -241,19 +280,6 @@ def recover(n: int,
             return Recovery(INSUFFICIENT, n=n,
                             reason=f"neither n_{side} nor p_{side} was reported for the "
                                    f"{'first' if side == 'a' else 'second'} criterion")
-    for name, v in (("kappa", kappa), ("agreement", agreement),
-                    ("p_a", p_a), ("p_b", p_b)):
-        if v is None:
-            continue
-        try:
-            parsed = Decimal(v)
-        except InvalidDecimal as exc:
-            raise InvalidInput(f"{name} = {v!r} is not a decimal number") from exc
-        if not parsed.is_finite():
-            raise InvalidInput(f"{name} = {v!r} is not a finite number")
-    if kappa is not None and not -1 <= Decimal(kappa) <= 1:
-        raise InvalidInput(f"kappa = {kappa} is outside [-1, 1]")
-
     a_counts = _marginal_counts(n, n_a, p_a, marginals_as_percent, "a", convention)
     b_counts = _marginal_counts(n, n_b, p_b, marginals_as_percent, "b", convention)
 
@@ -277,6 +303,12 @@ def recover(n: int,
                         exact_kappa(n11, n10, n01, n00), kappa,
                         convention=convention):
                     continue
+                if phi is not None:
+                    try:
+                        if not phi_rounds_to(n11, n10, n01, n00, phi, convention):
+                            continue
+                    except UndefinedStatistic:
+                        continue   # a zero marginal: this table cannot be the one
                 if agreement is not None and not exactly_rounds_to(
                         Fraction(n11 + n00, n), agreement, agreement_as_percent,
                         convention):
@@ -306,7 +338,7 @@ def recover(n: int,
 
     published = {k: v for k, v in
                  (("n_a", n_a), ("n_b", n_b), ("p_a", p_a), ("p_b", p_b),
-                  ("kappa", kappa), ("agreement", agreement),
+                  ("kappa", kappa), ("phi", phi), ("agreement", agreement),
                   ("mcnemar", mcnemar), ("discordant", discordant)) if v is not None}
     published.update(extra)
     if mcnemar is not None:
@@ -334,31 +366,43 @@ def recover(n: int,
             return Recovery(INFEASIBLE, n=n, published=published,
                             reason=f"no integer count on {n} has a proportion "
                                    f"matching p_{side} = {printed!r}")
-    if agreement is not None:
-        without = recover(n, n_a=n_a, n_b=n_b, p_a=p_a, p_b=p_b, kappa=kappa,
+    if agreement is not None and len(given) > 1:
+        # Drop the agreement alone and keep every other figure, so the agreement is
+        # blamed only where it is the figure that excludes.
+        without = recover(n, n_a=n_a, n_b=n_b, p_a=p_a, p_b=p_b, kappa=kappa, phi=phi,
+                          mcnemar=mcnemar, mcnemar_test=mcnemar_test,
+                          discordant=discordant,
                           marginals_as_percent=marginals_as_percent,
-                          convention=convention)
+                          convention=convention, **extra)
         if without:
+            others = ("the marginals and kappa" if given == ["kappa", "agreement"]
+                      else "the other published figures")
             return Recovery(INFEASIBLE, n=n, published=published,
-                            reason=f"the marginals and kappa admit {len(without)} "
+                            reason=f"{others} admit {len(without)} "
                                    f"table(s); adding the published agreement admits none")
-    spans = []
-    for na in a_counts:
-        for nb in b_counts:
-            try:
-                spans.append((kappa_min(na / n, nb / n), kappa_max(na / n, nb / n)))
-            except UndefinedStatistic:
-                continue
-    if spans:
-        lo, hi = min(s[0] for s in spans), max(s[1] for s in spans)
-        k_lo, k_hi = (float(x) for x in exact_interval(kappa,
-                                                       convention=convention))
-        if k_hi < lo or k_lo > hi:
+    if kappa is not None:
+        spans = []
+        for na in a_counts:
+            for nb in b_counts:
+                try:
+                    spans.append((kappa_min(na / n, nb / n), kappa_max(na / n, nb / n)))
+                except UndefinedStatistic:
+                    continue
+        if spans:
+            lo, hi = min(s[0] for s in spans), max(s[1] for s in spans)
+            k_lo, k_hi = (float(x) for x in exact_interval(kappa,
+                                                           convention=convention))
+            if k_hi < lo or k_lo > hi:
+                return Recovery(INFEASIBLE, n=n, published=published,
+                                reason=f"the published kappa lies outside [{lo:.3f}, {hi:.3f}], "
+                                       f"the range these marginals permit")
+        if given == ["kappa"] and not extra:
             return Recovery(INFEASIBLE, n=n, published=published,
-                            reason=f"the published kappa lies outside [{lo:.3f}, {hi:.3f}], "
-                                   f"the range these marginals permit")
+                            reason="the marginals permit this kappa, but no integer "
+                                   "table attains it")
     return Recovery(INFEASIBLE, n=n, published=published,
-                    reason="the marginals permit this kappa, but no integer table attains it")
+                    reason="no integer table on these marginals reproduces the published "
+                           + " and ".join(given) + " together")
 
 
 def recover_many(rows: Sequence[dict]) -> list[Recovery]:
@@ -367,7 +411,11 @@ def recover_many(rows: Sequence[dict]) -> list[Recovery]:
     One malformed row does not stop the rest: it comes back with status
     'insufficient' and the reason, so a caller can count what was skipped.
     """
-    accepted = set(inspect.signature(recover).parameters) - {"n"}
+    # The further statistics arrive through **statistics, so their names are not
+    # parameters of recover and have to be added, or a row giving only one of them
+    # would be read as reporting nothing.
+    accepted = ((set(inspect.signature(recover).parameters) - {"n", "statistics"})
+                | set(CLOSING_STATISTICS))
     out = []
     for row in rows:
         extra = set(row) - accepted - {"n"}

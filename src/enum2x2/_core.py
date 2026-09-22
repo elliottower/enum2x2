@@ -275,6 +275,11 @@ def mcnemar_midp(n10: int, n01: int) -> Fraction:
 def mcnemar_chisq(n10: int, n01: int, continuity: bool = False) -> Fraction:
     """McNemar's chi-square statistic, exactly, with or without Yates's correction.
 
+    The correction follows R's `mcnemar.test`, which applies it only when the two
+    discordant cells differ: a symmetric table has statistic 0 and p = 1 either
+    way. Applying (|d| - 1)^2 at d = 0 would give a symmetric table a smaller p
+    than one with d = 1.
+
     Undefined when the two criteria never disagree, since the statistic divides
     by the discordant total.
     """
@@ -283,9 +288,7 @@ def mcnemar_chisq(n10: int, n01: int, continuity: bool = False) -> Fraction:
         raise UndefinedStatistic(
             "no discordant pairs, so McNemar's chi-square divides by zero")
     d = abs(n10 - n01)
-    num = (d - 1) ** 2 if continuity else d * d
-    if continuity and d == 0:
-        num = 1
+    num = (d - 1) ** 2 if continuity and d > 0 else d * d
     return Fraction(num, m)
 
 
@@ -315,6 +318,20 @@ def mcnemar_p(n10: int, n01: int, test: str = "exact") -> Fraction | float:
         f"test must be 'exact', 'midp', 'chisq' or 'chisq_cc', got {test!r}")
 
 
+def normalize_printed_p(printed: str) -> str:
+    """A printed p in plain form: 'P < 0.001' and 'p≤0.001' become '<0.001' and '<=0.001'.
+
+    Papers write the p itself, a comparison sign and the number in several ways; the
+    reading keeps the comparison and the number and drops the rest.
+    """
+    text = printed.strip().replace(" ", "").replace("\u2264", "<=").replace("\u2265", ">=")
+    if text[:1] in ("p", "P"):
+        text = text[1:]
+    if text.startswith("="):
+        text = text[1:]
+    return text
+
+
 def satisfies_printed_p(value, printed: str, test: str,
                         convention: str = "half_up") -> bool:
     """Does a candidate table's p match what a source printed?
@@ -323,7 +340,7 @@ def satisfies_printed_p(value, printed: str, test: str,
     ('0.0002'). A bound is a strict inequality; a point value is the rounding
     interval used everywhere else in this package.
     """
-    text = printed.strip().replace(" ", "")
+    text = normalize_printed_p(printed)
     for op in ("<=", ">=", "<", ">"):
         if text.startswith(op):
             rest = text[len(op):]
@@ -361,12 +378,15 @@ def observed_agreement(n11: int, n10: int, n01: int, n00: int) -> Fraction:
 
 
 def positive_agreement(n11: int, n10: int, n01: int, n00: int) -> Fraction:
-    """PPA. The FDA's concordance measure for a test against a comparator."""
+    """Positive specific agreement (Cicchetti and Feinstein 1990), symmetric in the
+    two criteria. Not the FDA's positive percent agreement, n11/(n11+n01), which
+    treats one criterion as the comparator."""
     return _f(2 * n11, 2 * n11 + n10 + n01)
 
 
 def negative_agreement(n11: int, n10: int, n01: int, n00: int) -> Fraction:
-    """NPA, the same measure on the negatives."""
+    """Negative specific agreement, the same measure on the negatives. Not the
+    FDA's negative percent agreement, n00/(n10+n00)."""
     return _f(2 * n00, 2 * n00 + n10 + n01)
 
 
@@ -432,11 +452,50 @@ def mcnemar_odds_ratio(n11: int, n10: int, n01: int, n00: int) -> Fraction:
 
 
 def phi(n11: int, n10: int, n01: int, n00: int) -> Fraction:
-    """Phi squared, exactly. Phi itself is generally irrational, so the
-    comparison is made on the square and the printed value squared."""
+    """Phi squared, exactly, for a source that printed phi squared.
+
+    A source that printed phi itself is matched by `phi_rounds_to`, which keeps
+    the sign and compares against the printed phi's own rounding interval; the
+    rounding interval of a squared figure is not the square of phi's.
+    """
     num = (n11 * n00 - n10 * n01) ** 2
     den = (n11 + n10) * (n01 + n00) * (n11 + n01) * (n10 + n00)
     return _f(num, den)
+
+
+def _compare_signed_root(num: int, den: int, bound: Fraction) -> int:
+    """Compare num / sqrt(den) with `bound`, exactly: -1, 0 or 1.
+
+    Phi is num / sqrt(den), generally irrational, so it is compared through its
+    square with the sign handled separately. den is positive.
+    """
+    if num == 0:
+        return (bound < 0) - (bound > 0)
+    square = Fraction(num * num, den)
+    if num > 0:
+        if bound <= 0:
+            return 1
+        b2 = bound * bound
+        return (square > b2) - (square < b2)
+    if bound >= 0:
+        return -1
+    b2 = bound * bound
+    # Both negative: the value lies below the bound when its magnitude is larger.
+    return (square < b2) - (square > b2)
+
+
+def phi_rounds_to(n11: int, n10: int, n01: int, n00: int, printed: str,
+                  convention: str = "half_up") -> bool:
+    """Does this table's phi coefficient match a printed phi? Exact, with its sign."""
+    den = (n11 + n10) * (n01 + n00) * (n11 + n01) * (n10 + n00)
+    if den == 0:
+        raise UndefinedStatistic("a zero marginal leaves phi undefined")
+    num = n11 * n00 - n10 * n01
+    lo, hi, lo_closed, hi_closed = _exact_bounds(printed, False, convention)
+    above_lo = _compare_signed_root(num, den, lo)
+    below_hi = _compare_signed_root(num, den, hi)
+    return ((above_lo >= 0 if lo_closed else above_lo > 0)
+            and (below_hi <= 0 if hi_closed else below_hi < 0))
 
 
 # name -> (function, human description). Every one is exact.
@@ -445,9 +504,19 @@ def phi(n11: int, n10: int, n01: int, n00: int) -> Fraction:
 # insufficient reporting, not a recovery.
 MARGINAL_DETERMINED = frozenset({"prevalence_index", "bias_index"})
 
+# The values each printed figure can take; one outside is a defect in the call.
+# None is unbounded. The agreement bounds are read as percent where so declared.
+RANGES = {"kappa": (-1, 1), "phi": (-1, 1), "agreement": (0, 1),
+          "positive_agreement": (0, 1), "negative_agreement": (0, 1), "jaccard": (0, 1),
+          "pabak": (-1, 1), "scott_pi": (-1, 1), "gwet_ac1": (-1, 1),
+          "prevalence_index": (-1, 1), "bias_index": (-1, 1), "odds_ratio": (0, None),
+          "mcnemar_odds_ratio": (0, None), "phi_squared": (0, 1)}
+
 CLOSING_STATISTICS = {
-    "ppa": (positive_agreement, "positive agreement, 2*n11/(2*n11+n10+n01)"),
-    "npa": (negative_agreement, "negative agreement, 2*n00/(2*n00+n10+n01)"),
+    "positive_agreement": (positive_agreement,
+                           "positive specific agreement, 2*n11/(2*n11+n10+n01)"),
+    "negative_agreement": (negative_agreement,
+                           "negative specific agreement, 2*n00/(2*n00+n10+n01)"),
     "jaccard": (jaccard, "overlap among cases either criterion identifies"),
     "pabak": (pabak, "prevalence-adjusted bias-adjusted kappa, 2*po-1"),
     "scott_pi": (scott_pi, "Scott's pi"),
