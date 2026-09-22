@@ -16,8 +16,8 @@ often just one.
 
 ## The problem, concretely
 
-A pooled series of 768 patients, two readings of the DSM-5 delirium criteria, published as
-**κ = 0.29**. That reads like two definitions that disagree a fair amount.
+A pooled series of 768 patients, two readings of the DSM-5 delirium criteria, published at
+**60% agreement** and **κ = 0.29**. That reads like two definitions that disagree a fair amount.
 
 Here is the table underneath it:
 
@@ -31,7 +31,7 @@ differ on all fall the same way, relaxed-positive and strict-negative. One readi
 three times wider than the other. Observed agreement is the highest these
 two marginals permit: κ = 0.29 is the highest κ these marginals allow.
 
-None of that is in "κ = 0.29", and κ = 0.29 is all the paper printed.
+None of that is in "60% agreement and κ = 0.29", which is what the paper printed.
 
 ## Install
 
