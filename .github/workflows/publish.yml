@@ -4,12 +4,14 @@ on:
   release:
     types: [published]
 
-permissions:
-  id-token: write
-
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # PyPI's trusted publisher names this environment, and the environment admits only v* tags.
+    environment: release
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - uses: actions/checkout@v4
